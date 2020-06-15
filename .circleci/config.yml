@@ -1,0 +1,42 @@
+version: 2.1
+
+workflows:
+  build:
+    jobs:
+      - build
+
+jobs:
+  build:
+    docker:
+      - image: circleci/golang:1.14.3
+
+    steps:
+      - checkout
+
+      - setup_remote_docker:
+          docker_layer_caching: true
+
+      - restore_cache:
+          keys:
+            - v1-pkg-cache-application-operator
+
+      - run:
+          name: "Build docker image"
+          command: docker build -t ${DOCKER_REGISTRY}/${DOCKER_REPO}:${CIRCLE_SHA1} .
+
+      - save_cache:
+          paths:
+            - /go
+          key: v1-pkg-cache-application-operator
+
+      - deploy:
+          name: "Upload container to registry"
+          command: |
+            set -eu
+            if [ "$CIRCLE_BRANCH" = "main" ]; then
+                docker login -u $DOCKER_USER -p $DOCKER_PASS $DOCKER_REGISTRY
+                VTAG="$(git describe --tags)"
+                docker push ${DOCKER_REGISTRY}/${DOCKER_REPO}:${CIRCLE_SHA1}
+                docker tag ${DOCKER_REGISTRY}/${DOCKER_REPO}:${CIRCLE_SHA1} ${DOCKER_REGISTRY}/${DOCKER_REPO}:${VTAG}
+                docker push ${DOCKER_REGISTRY}/${DOCKER_REPO}:${VTAG}
+            fi
