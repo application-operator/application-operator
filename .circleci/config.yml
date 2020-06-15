@@ -18,7 +18,7 @@ jobs:
 
       - restore_cache:
           keys:
-            - v1-pkg-cache-application-operator
+            - v2-pkg-cache-application-operator
 
       - run:
           name: "Build docker image"
@@ -26,8 +26,8 @@ jobs:
 
       - save_cache:
           paths:
-            - /go
-          key: v1-pkg-cache-application-operator
+            - ~/.cache/go-build
+          key: v2-pkg-cache-application-operator
 
       - deploy:
           name: "Upload container to registry"
