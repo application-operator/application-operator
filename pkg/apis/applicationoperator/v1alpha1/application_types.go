@@ -5,8 +5,6 @@ import (
 )
 
 // ApplicationSpec defines the desired state of Application
-// +kubebuilder:printcolumn:name="Environment",type=string,JSONPath=`.spec.environment`,description=`The environment in which the application lives`
-// +kubebuilder:printcolumn:name="Version",type=integer,JSONPath=`.spec.version`,description=`The version of the application`
 type ApplicationSpec struct {
 	// +kubebuilder:validation:MaxLength=24
 	Application string `json:"application"`
@@ -17,8 +15,6 @@ type ApplicationSpec struct {
 }
 
 // ApplicationStatus defines the observed state of Application
-// +kubebuilder:printcolumn:name="Config",type=string,JSONPath=`.status.configVersion`,description=`The version of the last applied configuration`
-// +kubebuilder:printcolumn:name="Last Updated",type=date-time,JSONPath=`.status.lastUpdated`,description=`The time the application was last updated`
 type ApplicationStatus struct {
 	ConfigVersion string      `json:"configVersion"`
 	LastUpdated   metav1.Time `json:"lastUpdated"`
@@ -29,6 +25,11 @@ type ApplicationStatus struct {
 // Application is the Schema for the applications API
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:path=applications,scope=Namespaced
+// +kubebuilder:printcolumn:name="Application",type=string,JSONPath=`.spec.application`,description=`The name of the application`
+// +kubebuilder:printcolumn:name="Environment",type=string,JSONPath=`.spec.environment`,description=`The environment in which the application lives`
+// +kubebuilder:printcolumn:name="Version",type=integer,JSONPath=`.spec.version`,description=`The version of the application`
+// +kubebuilder:printcolumn:name="Config",type=string,JSONPath=`.status.configVersion`,description=`The version of the last applied configuration`
+// +kubebuilder:printcolumn:name="Last Updated",type=date-time,JSONPath=`.status.lastUpdated`,description=`The time the application was last updated`
 type Application struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

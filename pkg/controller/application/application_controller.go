@@ -96,9 +96,6 @@ func (r *ReconcileApplication) Reconcile(request reconcile.Request) (reconcile.R
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	name := job.GetName()
-	namespace := job.GetNamespace()
-	log.Info("Extra", "name", name, "namespace", namespace)
 
 	// Set Application instance as the owner and controller
 	if err = controllerutil.SetControllerReference(instance, job, r.scheme); err != nil {
