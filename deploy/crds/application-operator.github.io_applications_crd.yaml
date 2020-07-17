@@ -31,7 +31,7 @@ spec:
     - description: The time the application was last updated
       jsonPath: .status.lastUpdated
       name: Last Updated
-      type: date-time
+      type: date
     name: v1alpha1
     schema:
       openAPIV3Schema:
@@ -55,6 +55,8 @@ spec:
               application:
                 maxLength: 24
                 type: string
+              dryrun:
+                type: boolean
               environment:
                 maxLength: 10
                 type: string

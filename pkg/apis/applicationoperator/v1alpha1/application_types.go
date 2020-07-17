@@ -12,6 +12,7 @@ type ApplicationSpec struct {
 	Environment string `json:"environment"`
 	Version     string `json:"version"`
 	Method      string `json:"method,omitempty"`
+	DryRun      bool   `json:"dryrun,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application
@@ -29,7 +30,7 @@ type ApplicationStatus struct {
 // +kubebuilder:printcolumn:name="Environment",type=string,JSONPath=`.spec.environment`,description=`The environment in which the application lives`
 // +kubebuilder:printcolumn:name="Version",type=integer,JSONPath=`.spec.version`,description=`The version of the application`
 // +kubebuilder:printcolumn:name="Config",type=string,JSONPath=`.status.configVersion`,description=`The version of the last applied configuration`
-// +kubebuilder:printcolumn:name="Last Updated",type=date-time,JSONPath=`.status.lastUpdated`,description=`The time the application was last updated`
+// +kubebuilder:printcolumn:name="Last Updated",type=date,JSONPath=`.status.lastUpdated`,description=`The time the application was last updated`
 type Application struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
