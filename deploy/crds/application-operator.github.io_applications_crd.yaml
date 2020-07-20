@@ -57,6 +57,7 @@ spec:
                 type: string
               dryrun:
                 type: boolean
+                default: false
               environment:
                 maxLength: 10
                 type: string
@@ -66,6 +67,7 @@ spec:
                 type: string
             required:
             - application
+            - dryrun
             - environment
             - version
             type: object

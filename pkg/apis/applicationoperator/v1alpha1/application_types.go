@@ -12,7 +12,8 @@ type ApplicationSpec struct {
 	Environment string `json:"environment"`
 	Version     string `json:"version"`
 	Method      string `json:"method,omitempty"`
-	DryRun      bool   `json:"dryrun,omitempty"`
+	// +kubebuilder:validation:Default=false
+	DryRun bool `json:"dryrun"`
 }
 
 // ApplicationStatus defines the observed state of Application
