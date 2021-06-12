@@ -8,7 +8,7 @@ workflows:
 jobs:
   build:
     docker:
-      - image: circleci/golang:1.14.3
+      - image: circleci/golang:1.16.1
 
     steps:
       - checkout

@@ -1,0 +1,16 @@
+domain: application-operator.github.io
+layout:
+- go.kubebuilder.io/v3
+projectName: application-operator
+repo: github.com/application-operator/application-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: application-operator.github.io
+  group: application-operator.github.io
+  kind: Application
+  path: github.com/application-operator/application-operator/api/v1alpha1
+  version: v1alpha1
+version: "3"

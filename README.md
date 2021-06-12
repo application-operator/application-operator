@@ -47,4 +47,4 @@ Variables are available in the template through three sources:
 
 ## Developer notes
 
-This operator was built using the operator-sdk - the CRDs are generated.
+This operator was built using kubebuilder
