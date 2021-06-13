@@ -1,7 +1,8 @@
 apiVersion: application-operator.github.io.application-operator.github.io/v1alpha1
 kind: Application
 metadata:
-  name: application-sample
+  name: test-docker-debug
 spec:
-  # Add fields here
-  foo: bar
+  application: docker-debug
+  environment: test
+  version: blue

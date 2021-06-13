@@ -1,0 +1,9 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: env
+  namespace: applications
+data:
+  IMAGE: applicationoperator/ansible-demo:v0.0.0
+  COMMAND: /ansible/deploy.py
+  SERVICE_ACCOUNT: application-operator

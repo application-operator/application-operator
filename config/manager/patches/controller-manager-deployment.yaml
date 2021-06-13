@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-manager
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsUser: 1234
+        runAsGroup: 1234
+      containers:
+        - name: controller
+          image: applicationoperator/applicationoperator:v0.4-4-g2c3bdc1
+          env:
+            - name: WATCH_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: TEMPLATE_DIR
+              value: /config
+            - name: OPERATOR_NAME
+              value: "application-operator"
+            - name: CONFIG_VERSION
+              value: "abcd-1234"  # this should be configured by CI
+          envFrom:
+            - configMapRef:
+                name: env
+          volumeMounts:
+            - name: config
+              mountPath: /config
+      volumes:
+        - name: config
+          configMap:
+            name: config

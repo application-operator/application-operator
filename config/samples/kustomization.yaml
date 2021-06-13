@@ -1,0 +1,11 @@
+resources:
+  - resources/role.yaml
+  - resources/role_binding.yaml
+
+configMapGenerator:
+  - name: env
+    files:
+      - resources/env-configmap.yaml
+  - name: config
+    files:
+      - resources/config-configmap.yaml
