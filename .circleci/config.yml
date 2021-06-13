@@ -33,7 +33,7 @@ jobs:
           name: "Upload container to registry"
           command: |
             set -eu
-            if [ "$CIRCLE_BRANCH" = "main" ]; then
+            if [ "$CIRCLE_BRANCH" = "main" -o "$CIRCLE_BRANCH" = "dev" ]; then
                 docker login -u $DOCKER_USER -p $DOCKER_PASS $DOCKER_REGISTRY
                 VTAG="$(git describe --tags)"
                 docker push ${DOCKER_REGISTRY}/${DOCKER_REPO}:${CIRCLE_SHA1}
