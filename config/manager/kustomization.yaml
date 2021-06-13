@@ -8,3 +8,9 @@ configMapGenerator:
 - name: manager-config
   files:
   - controller_manager_config.yaml
+
+patches:
+  - target:
+      kind: Deployment
+      name: controller-manager
+    path: patches/controller-manager-deployment.yaml

@@ -9,8 +9,8 @@ spec:
         runAsUser: 1234
         runAsGroup: 1234
       containers:
-        - name: controller
-          image: applicationoperator/application-operator:v0.4-4-g2c3bdc1
+        - name: manager
+          image: applicationoperator/application-operator:v0.4-6-gabf14cb
           env:
             - name: WATCH_NAMESPACE
               valueFrom:
@@ -25,7 +25,7 @@ spec:
             - name: OPERATOR_NAME
               value: "application-operator"
             - name: CONFIG_VERSION
-              value: "abcd-1234"  # this should be configured by CI
+              value: "v0.4-6-gabf14cb"  # this should be configured by CI
           envFrom:
             - configMapRef:
                 name: env

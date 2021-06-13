@@ -1,9 +1,9 @@
 apiVersion: application-operator.github.io/v1alpha1
 kind: Application
 metadata:
-  name: test-docker-debug
-  namespace: applications
+  name: prod-docker-debug
 spec:
   application: docker-debug
-  environment: test
-  version: blue-12345
+  environment: prod
+  version: green
+  method: demo

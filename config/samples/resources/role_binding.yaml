@@ -4,8 +4,8 @@ metadata:
   name: application-operator
 subjects:
 - kind: ServiceAccount
-  name: application-operator
+  name: application-operator-executor
 roleRef:
   kind: Role
-  name: application-operator
+  name: application-operator-executor
   apiGroup: rbac.authorization.k8s.io

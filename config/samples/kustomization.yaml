@@ -1,0 +1,14 @@
+resources:
+  - resources/role.yaml
+  - resources/role_binding.yaml
+  - resources/serviceaccount.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: env
+    env: resources/env.env
+  - name: config
+    files:
+      - resources/demo-template.yml

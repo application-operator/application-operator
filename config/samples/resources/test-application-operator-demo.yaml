@@ -1,0 +1,9 @@
+apiVersion: application-operator.github.io/v1alpha1
+kind: Application
+metadata:
+  name: test-docker-debug
+spec:
+  application: docker-debug
+  environment: test
+  version: blue
+  method: demo

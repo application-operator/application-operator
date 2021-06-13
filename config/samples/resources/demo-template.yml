@@ -1,0 +1,43 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .JobName }}
+  namespace: {{ .Application.Namespace }}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      name: {{ .JobName }}
+      namespace: {{ .Application.Namespace }}
+    spec:
+      dns_policy: ClusterFirst
+      dns_config:
+        options:
+          - name: ndots
+            value: "1"
+      serviceAccount: {{ index .Env "SERVICE_ACCOUNT" }}
+      securityContext:
+        runAsUser: 1030
+        runAsGroup: 1030
+        fsGroup: 1030
+      containers:
+        - name: configurator
+          image: {{ index .Env "IMAGE" }}
+          command:
+            - {{ index .Env "COMMAND" }}
+            - {{ .Application.Name }}
+            - {{ .Application.Spec.Application }}
+            - {{ .Application.Spec.Environment }}
+            - {{ .Application.Spec.Version }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          resources:
+            limit:
+              cpu: 200m
+              memory: 128Mi
+      restartPolicy: Never
+      backoffLimit: 0
