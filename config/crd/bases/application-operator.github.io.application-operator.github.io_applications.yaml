@@ -61,6 +61,7 @@ spec:
                 maxLength: 24
                 type: string
               dryrun:
+                default: false
                 type: boolean
               environment:
                 maxLength: 10
