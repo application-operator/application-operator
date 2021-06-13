@@ -50,6 +50,7 @@ type ApplicationReconciler struct {
 //+kubebuilder:rbac:groups=application-operator.github.io.application-operator.github.io,resources=applications,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=application-operator.github.io.application-operator.github.io,resources=applications/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=application-operator.github.io.application-operator.github.io,resources=applications/finalizers,verbs=update
+//+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;create
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -75,7 +76,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Define a new Pod object
-	job, err := newJobForCR(instance)
+	job, err := newJobForApplication(instance)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -127,15 +128,15 @@ func versionToRFC1123(version string, length int) string {
 	return strings.TrimRight(fmt.Sprintf(format, strings.ReplaceAll(strings.ReplaceAll(version, ".", "-"), "_", "-")), "-")
 }
 
-func newJobForCR(cr *applicationoperatorgithubiov1alpha1.Application) (*batchv1.Job, error) {
+func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Application) (*batchv1.Job, error) {
 	env := envVarsToMap()
-	jobName := fmt.Sprintf("%s-%s-%s-%s", cr.Spec.Environment, cr.Spec.Application, versionToRFC1123(env["CONFIG_VERSION"], 13), versionToRFC1123(cr.Spec.Version, 13))
+	jobName := fmt.Sprintf("%s-%s-%s-%s", application.Spec.Environment, application.Spec.Application, versionToRFC1123(env["CONFIG_VERSION"], 13), versionToRFC1123(application.Spec.Version, 13))
 	templateVars := &TemplateVars{
-		Application: cr,
+		Application: application,
 		Env:         env,
 		JobName:     jobName,
 	}
-	method := cr.Spec.Method
+	method := application.Spec.Method
 	if method == "" {
 		method = "default"
 	}
