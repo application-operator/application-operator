@@ -47,9 +47,9 @@ type ApplicationReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=application-operator.github.io.application-operator.github.io,resources=applications,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=application-operator.github.io.application-operator.github.io,resources=applications/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=application-operator.github.io.application-operator.github.io,resources=applications/finalizers,verbs=update
+//+kubebuilder:rbac:groups=application-operator.github.io,resources=applications,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=application-operator.github.io,resources=applications/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=application-operator.github.io,resources=applications/finalizers,verbs=update
 //+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;create
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to

@@ -5,7 +5,7 @@ metadata:
   name: application-viewer-role
 rules:
 - apiGroups:
-  - application-operator.github.io.application-operator.github.io
+  - application-operator.github.io
   resources:
   - applications
   verbs:
@@ -13,7 +13,7 @@ rules:
   - list
   - watch
 - apiGroups:
-  - application-operator.github.io.application-operator.github.io
+  - application-operator.github.io
   resources:
   - applications/status
   verbs:

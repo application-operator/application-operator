@@ -6,9 +6,9 @@ metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
-  name: applications.application-operator.github.io.application-operator.github.io
+  name: applications.application-operator.github.io
 spec:
-  group: application-operator.github.io.application-operator.github.io
+  group: application-operator.github.io
   names:
     kind: Application
     listKind: ApplicationList
@@ -72,7 +72,6 @@ spec:
                 type: string
             required:
             - application
-            - dryrun
             - environment
             - version
             type: object

@@ -29,6 +29,7 @@ type ApplicationSpec struct {
 	Version     string `json:"version"`
 	Method      string `json:"method,omitempty"`
 	// +kubebuilder:default:=false
+	// +kubebuilder:validation:Optional
 	DryRun bool `json:"dryrun"`
 }
 
