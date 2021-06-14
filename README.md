@@ -9,15 +9,40 @@ application-operator relies on a few things being explicitly set
 
 ## Installation
 
-* Install the Custom Resource Definition (see deploy/)
-* Install the operator (see deploy/deploy.yaml)
-* Set up applications by creating new Application resources (see deploy/example.yaml)
-* Add RBAC permissions for the ServiceAccount for the job
+* Install the Custom Resource Definition:
+  ```
+  kubectl apply -k config/crd
+  ```
+* Install the operator (for some reason `kubectl apply -k` fails but `kustomize | kubectl` works:
+  ```
+  kustomize build config/default | kubectl apply -f -
+  ```
+* Add the sample configuration (this also includes some RBAC to do the job. Here we only allow 
+  it to modify resources in the `applications` namespace but typically you'll want a ClusterRole):
+  ```
+  kubectl apply -k config/sample
+  ```
+* Add a test application:
+  ```
+  kubectl apply -f config/samples/resources/test-docker-debug.yaml
+  ```
+* If the test-docker-debug Job completes successfully, you should have a new test-docker-debug
+  Deployment, and
+  ```
+  kubectl port-forward svc/test-docker-debug 8000:80
+  ```
+  should allow http://localhost:8000/ to show a blue docker-debug
+* Doing the same but with prod-docker-debug should create two replicas, and visiting the service
+  should show the green docker-debug
+
+
+## Using a bespoke application template
 
 You will need a container that can do deployments. The example job template assumes
-that the container can run `/bin/deploy application environment version` and that will
-do the trick. The underlying mechanism is up to you, but I'll provide an example
-container that uses ansible-runner to do the work.
+that the container can run `./deploy.sh resource application environment version` and that will
+do the trick. The underlying mechanism is up to you - 
+[application-operator/application-operator-demo](https://github.com/application-operator/application-operator-demo)
+container uses kustomize to generate slightly different configuration based on environment.
 
 This container should either mount the configuration (e.g. from a git-sync sidecar
 container) or be built with the configuration included. My preference is to build
@@ -43,8 +68,3 @@ Variables are available in the template through three sources:
 * `.Application` - the resource definition of the application. Components of the application can
   be accessed using e.g. `.Application.Spec.Version`
 * `.env` - a map of all the environment variables. For example, `PATH` is accessed using `{{ .env index 'PATH' }}`
-
-
-## Developer notes
-
-This operator was built using kubebuilder
