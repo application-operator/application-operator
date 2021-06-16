@@ -19,13 +19,12 @@ application-operator relies on a few things being explicitly set
   ```
 * Install the Custom Resource Definition:
   ```
-  kubectl apply -k config/crd
+  kubectl create namespace applications
   ```
 * Alternately apply the CRD like this:
   ```
   make install
   ```
-
 * Add the sample configuration (this also includes some RBAC to do the job. Here we only allow 
   it to modify resources in the `applications` namespace but typically you'll want a ClusterRole):
   ```
