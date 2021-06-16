@@ -9,18 +9,26 @@ application-operator relies on a few things being explicitly set
 
 ## Installation
 
+* Create the `applications` namespace:
+  ```
+  kubectl create namespace applications
+  ```
+* Make sure you are using `applications` as your default namespace.
+  ```
+  kubens applications 
+  ```
 * Install the Custom Resource Definition:
   ```
   kubectl apply -k config/crd
   ```
-* Install the operator (for some reason `kubectl apply -k` fails but `kustomize | kubectl` works:
-  ```
-  kustomize build config/default | kubectl apply -f -
-  ```
 * Add the sample configuration (this also includes some RBAC to do the job. Here we only allow 
   it to modify resources in the `applications` namespace but typically you'll want a ClusterRole):
   ```
-  kubectl apply -k config/sample
+  kubectl apply -k config/samples
+  ```
+* Install the operator (for some reason `kubectl apply -k` fails but `kustomize | kubectl` works:
+  ```
+  kustomize build config/default | kubectl apply -f -
   ```
 * Add a test application:
   ```
