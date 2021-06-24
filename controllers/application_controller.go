@@ -252,7 +252,7 @@ func versionToRFC1123(version string, length int) string {
 
 func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Application) (*batchv1.Job, error) {
 	env := envVarsToMap()
-	// Note: strings below are truncated to fix the Kubernetes job name length of 63 characters.
+	// Note: strings below are truncated to fix the Kubernetes name length of 253 characters.
 	jobName := fmt.Sprintf("%s-%s-%s-%s",
 		versionToRFC1123(application.Spec.Environment, 13),
 		versionToRFC1123(application.Spec.Application, 13),
