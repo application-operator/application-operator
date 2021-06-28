@@ -156,7 +156,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		return ctrl.Result{}, err
 	}
 
-	if instance.Spec.DeploymentId == nil {
+	if instance.Spec.Deployment == nil {
 		//
 		// Deployment id is not assigned, nothing to be done.
 		//
@@ -237,7 +237,7 @@ func versionToRFC1123(version string, length int) string {
 
 func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Application) (*batchv1.Job, error) {
 	env := envVarsToMap()
-	jobName := fmt.Sprintf("%s-%s-%s-%s-%s", application.Spec.Environment, application.Spec.Application, versionToRFC1123(env["CONFIG_VERSION"], 13), versionToRFC1123(application.Spec.Version, 13), *application.Spec.DeploymentId)
+	jobName := fmt.Sprintf("%s-%s-%s-%s-%s", application.Spec.Environment, application.Spec.Application, versionToRFC1123(env["CONFIG_VERSION"], 13), versionToRFC1123(application.Spec.Version, 13), *application.Spec.Deployment)
 	templateVars := &TemplateVars{
 		Application: application,
 		Env:         env,
