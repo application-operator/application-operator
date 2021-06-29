@@ -9,18 +9,36 @@ application-operator relies on a few things being explicitly set
 
 ## Installation
 
+* Create the `applications` namespace:
+  ```
+  kubectl create namespace applications
+  ```
+* Make sure you are using `applications` as your default namespace.
+  ```
+  kubens applications 
+  ```
 * Install the Custom Resource Definition:
   ```
   kubectl apply -k config/crd
+  ```
+
+* Alternately apply the CRD like this:
+  ```
+  make install
+  ```
+
+* Add the sample configuration (this also includes some RBAC to do the job. Here we only allow 
+  it to modify resources in the `applications` namespace but typically you'll want a ClusterRole):
+  ```
+  kubectl apply -k config/samples
   ```
 * Install the operator (for some reason `kubectl apply -k` fails but `kustomize | kubectl` works:
   ```
   kustomize build config/default | kubectl apply -f -
   ```
-* Add the sample configuration (this also includes some RBAC to do the job. Here we only allow 
-  it to modify resources in the `applications` namespace but typically you'll want a ClusterRole):
+* Alternately run the operator locally:
   ```
-  kubectl apply -k config/sample
+  make run
   ```
 * Add a test application:
   ```
@@ -34,6 +52,21 @@ application-operator relies on a few things being explicitly set
   should allow http://localhost:8000/ to show a blue docker-debug
 * Doing the same but with prod-docker-debug should create two replicas, and visiting the service
   should show the green docker-debug
+
+* NOTE: To run locally using `make run` I had to copy `demo-template.yaml` to a `templates` sub-directory.
+* NOTE: The env vars on `.env` need to be mapped to local environment variables.
+
+* Run tests
+  ```
+  cd controllers
+  go test ./... -v
+  ```
+
+* Or ???
+  ```
+  make test
+  ```
+
 
 
 ## Using a bespoke application template
