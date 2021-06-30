@@ -60,7 +60,7 @@ spec:
               application:
                 maxLength: 24
                 type: string
-              deploymentId:
+              deployment:
                 description: The ID for the current/next deployment. You could set
                   this to a commit has or label.
                 type: string

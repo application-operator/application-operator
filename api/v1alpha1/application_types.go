@@ -38,7 +38,7 @@ type ApplicationSpec struct {
 	// You could set this to a commit has or label.
 	// +optional
 	//
-	Deployment *string `json:"deploymentId,omitempty"`
+	Deployment *string `json:"deployment,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application
