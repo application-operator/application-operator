@@ -231,10 +231,22 @@ func versionToRFC1123(version string, length int) string {
 func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Application) (*batchv1.Job, error) {
 	env := envVarsToMap()
 	var jobName string
+	// Note: strings below are truncated to fix the Kubernetes name length of 253 characters.
 	if application.Spec.Deployment != nil {
-		jobName = fmt.Sprintf("%s-%s-%s", application.Spec.Environment, application.Spec.Application, *application.Spec.Deployment)
+		jobName = fmt.Sprintf("%s-%s-%s-%s-%s",
+			versionToRFC1123(application.Spec.Environment, 11),
+			versionToRFC1123(application.Spec.Application, 11),
+			versionToRFC1123(env["CONFIG_VERSION"], 11),
+			versionToRFC1123(application.Spec.Version, 11),
+			versionToRFC1123(*application.Spec.Deployment, 11),
+		)
 	} else {
-		jobName = fmt.Sprintf("%s-%s-%s-%s", application.Spec.Environment, application.Spec.Application, versionToRFC1123(env["CONFIG_VERSION"], 13), versionToRFC1123(application.Spec.Version, 13))
+		jobName = fmt.Sprintf("%s-%s-%s-%s",
+			versionToRFC1123(application.Spec.Environment, 13),
+			versionToRFC1123(application.Spec.Application, 13),
+			versionToRFC1123(env["CONFIG_VERSION"], 13),
+			versionToRFC1123(application.Spec.Version, 13),
+		)
 	}
 
 	templateVars := &TemplateVars{
@@ -268,6 +280,11 @@ func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Appli
 	if err != nil {
 		return nil, fmt.Errorf("Couldn't convert template to job: %v", err)
 	}
+
+	//
+	// Label the job with details of the deployment.
+	//
+
 	return &job, nil
 }
 
