@@ -32,13 +32,6 @@ type ApplicationSpec struct {
 	// +kubebuilder:default:=false
 	// +kubebuilder:validation:Optional
 	DryRun bool `json:"dryrun"`
-
-	//
-	// The ID for the current/next deployment.
-	// You could set this to a commit has or label.
-	// +optional
-	//
-	Deployment *string `json:"deployment,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application

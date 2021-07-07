@@ -60,10 +60,6 @@ spec:
               application:
                 maxLength: 24
                 type: string
-              deployment:
-                description: The ID for the current/next deployment. You could set
-                  this to a commit has or label.
-                type: string
               dryrun:
                 default: false
                 type: boolean
