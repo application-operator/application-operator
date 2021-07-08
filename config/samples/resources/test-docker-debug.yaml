@@ -2,6 +2,7 @@ apiVersion: application-operator.github.io/v1alpha1
 kind: Application
 metadata:
   name: test-docker-debug
+  namespace: applications
 spec:
   application: docker-debug
   environment: test

@@ -12,3 +12,5 @@ configMapGenerator:
   - name: config
     files:
       - resources/demo-template.yml
+
+namespace: applications

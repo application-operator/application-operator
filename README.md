@@ -21,7 +21,6 @@ application-operator relies on a few things being explicitly set
   ```
   kubectl apply -k config/crd
   ```
-
 * Alternately apply the CRD like this:
   ```
   make install
