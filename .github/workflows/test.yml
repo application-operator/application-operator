@@ -8,7 +8,7 @@ on:
 
 jobs:
 
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
@@ -28,7 +28,8 @@ jobs:
     - name: Install Kubebuilder
       run: |
         curl -L -o kubebuilder https://go.kubebuilder.io/dl/latest/$(go env GOOS)/$(go env GOARCH)
-        chmod +x kubebuilder && mv kubebuilder /usr/local/bin/        
+        chmod +x kubebuilder
+        sudo mv kubebuilder /usr/local/bin/        
 
     - name: Test
       run: make test
