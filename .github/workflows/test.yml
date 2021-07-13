@@ -20,10 +20,10 @@ jobs:
     - name: Setup
       run: |
         export DEBIAN_FRONTEND=noninteractive
-        apt-get update 
-        apt-get -yq install curl
-        apt-get -yq install make
-        apt-get -yq install gcc       
+        sudo apt-get update 
+        sudo apt-get -yq install curl
+        sudo apt-get -yq install make
+        sudo apt-get -yq install gcc       
 
     - name: Install Kubebuilder
       run: |
