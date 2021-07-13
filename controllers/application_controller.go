@@ -24,6 +24,7 @@ import (
 	"os"
 	"path"
 	"strings"
+	"time"
 
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -37,7 +38,15 @@ import (
 	"sigs.k8s.io/yaml"
 
 	applicationoperatorgithubiov1alpha1 "github.com/application-operator/application-operator/api/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	ref "k8s.io/client-go/tools/reference"
 )
+
+//
+// The key to index on to find jobs owned by an application instance.
+//
+var jobOwnerKey = ".metadata.controller"
 
 var log = logf.Log.WithName("controller_application")
 
@@ -50,7 +59,8 @@ type ApplicationReconciler struct {
 //+kubebuilder:rbac:groups=application-operator.github.io,resources=applications,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=application-operator.github.io,resources=applications/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=application-operator.github.io,resources=applications/finalizers,verbs=update
-//+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;create
+//+kubebuilder:rbac:groups=batch,resources=jobs,verbs=get;create;list;watch;update;patch;delete
+//+kubebuilder:rbac:groups=batch,resources=jobs/status,verbs=get
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -75,7 +85,80 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Define a new Pod object
+	//
+	// Find Jobs for the application instance.
+	//
+	var jobs batchv1.JobList
+	if err := r.List(ctx, &jobs, client.InNamespace(request.Namespace), client.MatchingFields{jobOwnerKey: request.Name}); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	var activeJobs []*batchv1.Job
+	var successfulJobs []*batchv1.Job
+	var failedJobs []*batchv1.Job
+
+	//
+	// Sort Jobs into active and completed.
+	//
+	for i, job := range jobs.Items {
+		_, finishedType := isJobFinished(&job)
+		switch finishedType {
+		case "":
+			activeJobs = append(activeJobs, &jobs.Items[i])
+		case batchv1.JobFailed:
+			failedJobs = append(failedJobs, &jobs.Items[i])
+		case batchv1.JobComplete:
+			successfulJobs = append(successfulJobs, &jobs.Items[i])
+		}
+	}
+
+	//
+	// Update status of the Application instance.
+	//
+
+	instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
+
+	instance.Status.Active = nil
+	for _, activeJob := range activeJobs {
+		jobRef, err := ref.GetReference(r.Scheme, activeJob)
+		if err != nil {
+			log.Error(err, "Failed to get reference to job", "job", activeJob)
+			continue
+		}
+		instance.Status.Active = append(instance.Status.Active, *jobRef)
+	}
+
+	instance.Status.Succeeded = nil
+	for _, successfulJob := range successfulJobs {
+		jobRef, err := ref.GetReference(r.Scheme, successfulJob)
+		if err != nil {
+			log.Error(err, "Failed to get reference to job", "job", successfulJob)
+			continue
+		}
+		instance.Status.Succeeded = append(instance.Status.Succeeded, *jobRef)
+	}
+
+	instance.Status.Failed = nil
+	for _, failedJob := range failedJobs {
+		jobRef, err := ref.GetReference(r.Scheme, failedJob)
+		if err != nil {
+			log.Error(err, "Failed to get reference to job", "job", failedJob)
+			continue
+		}
+		instance.Status.Failed = append(instance.Status.Failed, *jobRef)
+	}
+
+	//
+	// Save the status of the application.
+	//
+	if err := r.Status().Update(ctx, instance); err != nil {
+		log.Error(err, "unable to update Application status")
+		return ctrl.Result{}, err
+	}
+
+	//
+	// Define a new Job object
+	//
 	job, err := newJobForApplication(instance)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -91,6 +174,10 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: job.Name, Namespace: job.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
 		reqLogger.Info("Creating a new Job", "Job.Namespace", job.Namespace, "Job.Name", job.Name)
+
+		//
+		// Job doesn't exist, create it.
+		//
 		err = r.Client.Create(context.TODO(), job)
 		if err != nil {
 			return reconcile.Result{}, err
@@ -105,6 +192,19 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	// Job already exists - don't requeue
 	reqLogger.Info("Skip reconcile: Job already exists", "Job.Namespace", found.Namespace, "Job.Name", found.Name)
 	return reconcile.Result{}, nil
+}
+
+//
+// Determines if a Job has finished.
+//
+func isJobFinished(job *batchv1.Job) (bool, batchv1.JobConditionType) {
+	for _, c := range job.Status.Conditions {
+		if (c.Type == batchv1.JobComplete || c.Type == batchv1.JobFailed) && c.Status == corev1.ConditionTrue {
+			return true, c.Type
+		}
+	}
+
+	return false, ""
 }
 
 type TemplateVars struct {
@@ -130,7 +230,14 @@ func versionToRFC1123(version string, length int) string {
 
 func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Application) (*batchv1.Job, error) {
 	env := envVarsToMap()
-	jobName := fmt.Sprintf("%s-%s-%s-%s", application.Spec.Environment, application.Spec.Application, versionToRFC1123(env["CONFIG_VERSION"], 13), versionToRFC1123(application.Spec.Version, 13))
+	// Note: strings below are truncated to fix the Kubernetes job name length of 63 characters.
+	jobName := fmt.Sprintf("%s-%s-%s-%s",
+		versionToRFC1123(application.Spec.Environment, 13),
+		versionToRFC1123(application.Spec.Application, 13),
+		versionToRFC1123(env["CONFIG_VERSION"], 13),
+		versionToRFC1123(application.Spec.Version, 13),
+	)
+
 	templateVars := &TemplateVars{
 		Application: application,
 		Env:         env,
@@ -162,12 +269,43 @@ func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Appli
 	if err != nil {
 		return nil, fmt.Errorf("Couldn't convert template to job: %v", err)
 	}
+
 	return &job, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
+
+	//
+	// Create an index that we can use to look up jobs later.
+	//
+	err := mgr.GetFieldIndexer().IndexField(context.Background(), &batchv1.Job{}, jobOwnerKey, func(rawObj client.Object) []string {
+		job := rawObj.(*batchv1.Job)         // Get object.
+		owner := metav1.GetControllerOf(job) // Get owner.
+
+		if owner == nil {
+			// No owner is found.
+			return nil
+		}
+
+		if owner.Kind != "Application" { //todo: do i need to check the api version?
+			// The owner is not an application.
+			return nil
+		}
+
+		return []string{owner.Name}
+	})
+
+	if err != nil {
+		return err
+	}
+
 	return ctrl.NewControllerManagedBy(mgr).
+
+		// Tells the operator framework the type to watch.
 		For(&applicationoperatorgithubiov1alpha1.Application{}).
+
+		// Inform the manager this controller owns some job, automatically call Reconcile when a job changes.
+		Owns(&batchv1.Job{}).
 		Complete(r)
 }
