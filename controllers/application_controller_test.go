@@ -1,6 +1,15 @@
 package controllers
 
-import "testing"
+import (
+	"context"
+	"testing"
+
+	applicationoperatorgithubiov1alpha1 "github.com/application-operator/application-operator/api/v1alpha1"
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+)
 
 func TestVersionToRFC1123(t *testing.T) {
 	got := versionToRFC1123("hello-world", 20)
@@ -32,3 +41,61 @@ func TestEnvVarsToMap(t *testing.T) {
 		t.Errorf("Expected environment variables to contain PATH")
 	}
 }
+
+var _ = Describe("Application Operator controller", func() {
+
+	It("Can create application object", func() {
+		applicationName := "my-application"
+		applicationNamespace := "default"
+
+		ctx := context.Background()
+
+		//
+		// Setup for a test application object.
+		//
+		application := &applicationoperatorgithubiov1alpha1.Application{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: "application-operator.github.io/v1alpha1",
+				Kind:       "Application",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      applicationName,
+				Namespace: applicationNamespace,
+			},
+			Spec: applicationoperatorgithubiov1alpha1.ApplicationSpec{
+				Application: "MyApplication",
+				Environment: "Dev",
+				Version:     "1",
+				Method:      "SomeMethod",
+				DryRun:      false,
+			},
+		}
+
+		//
+		// Create an application object.
+		//
+		Expect(k8sClient.Create(ctx, application)).Should(Succeed())
+
+		applicationKey := types.NamespacedName{Name: applicationName, Namespace: applicationNamespace}
+		createdApplication := &applicationoperatorgithubiov1alpha1.Application{}
+
+		//
+		// Check that the appliation object is creeted.
+		//
+		Eventually(func() bool {
+			err := k8sClient.Get(ctx, applicationKey, createdApplication)
+			return err == nil
+		}).Should(BeTrue())
+
+		//
+		// Check that we have no active jobs.
+		//
+		Consistently(func() (int, error) {
+			err := k8sClient.Get(ctx, applicationKey, createdApplication)
+			if err != nil {
+				return -1, err
+			}
+			return len(createdApplication.Status.Active), nil
+		}).Should(Equal(0))
+	})
+})
