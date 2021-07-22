@@ -88,7 +88,7 @@ var _ = Describe("Application Operator controller", func() {
 		}).Should(BeTrue())
 
 		//
-		// Check that we have no active jobs.
+		// Check that a job is initiated.
 		//
 		Eventually(func() (int, error) {
 			err := k8sClient.Get(ctx, applicationKey, createdApplication)
