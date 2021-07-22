@@ -27,7 +27,7 @@ spec:
       containers:
         - name: configurator
           image: busybox
-          command: ["/bin/sh", "-c", "echo Hi; sleep 1m; echo Working; sleep 1m; echo Bye; exit 0"]
+          command: ["/bin/sh", "-c", "echo Hi; sleep 1s; echo Working; sleep 1s; echo Bye; exit 0"]
           env:
             - name: POD_NAME
               valueFrom:
