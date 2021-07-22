@@ -44,7 +44,7 @@ func TestEnvVarsToMap(t *testing.T) {
 
 var _ = Describe("Application Operator controller", func() {
 
-	It("Creating an application object initiates a deployment job", func() {
+	It("initiates a deployment job when an application object is created", func() {
 		applicationName := "my-application"
 		applicationNamespace := "default"
 
