@@ -66,7 +66,7 @@ var _ = Describe("Application Operator controller", func() {
 				Application: "MyApplication",
 				Environment: "Dev",
 				Version:     "1",
-				Method:      "SomeMethod",
+				Method:      "test-method",
 				DryRun:      false,
 			},
 		}

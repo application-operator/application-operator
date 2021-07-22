@@ -1,0 +1,41 @@
+#
+# This Job template is required by the automated tests.
+#
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ .JobName }}
+  namespace: {{ .Application.Namespace }}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      name: {{ .JobName }}
+      namespace: {{ .Application.Namespace }}
+    spec:
+      dns_policy: ClusterFirst
+      dns_config:
+        options:
+          - name: ndots
+            value: "1"
+      serviceAccount: {{ index .Env "SERVICE_ACCOUNT" }}
+      securityContext:
+        runAsUser: 1030
+        runAsGroup: 1030
+        fsGroup: 1030
+      containers:
+        - name: configurator
+          image: busybox
+          command: ["/bin/sh", "-c", "echo Hi; sleep 1m; echo Working; sleep 1m; echo Bye; exit 0"]
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          resources:
+            limit:
+              cpu: 200m
+              memory: 128Mi
+      restartPolicy: Never
+      backoffLimit: 0
