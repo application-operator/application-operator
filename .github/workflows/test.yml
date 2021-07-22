@@ -32,4 +32,6 @@ jobs:
         sudo mv kubebuilder /usr/local/bin/        
 
     - name: Test
-      run: make test
+      run: |
+        export CONFIG_VERSION=1234
+        make test

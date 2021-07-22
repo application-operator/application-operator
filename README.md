@@ -56,17 +56,11 @@ application-operator relies on a few things being explicitly set
 * NOTE: The env vars on `.env` need to be mapped to local environment variables.
 
 * Run tests
-  ```
-  cd controllers
-  go test ./... -v
-  ```
 
-* Or ???
-  ```
+  ```bash
+  export CONFIG_VERSION=1243
   make test
   ```
-
-
 
 ## Using a bespoke application template
 
