@@ -44,7 +44,7 @@ func TestEnvVarsToMap(t *testing.T) {
 
 var _ = Describe("Application Operator controller", func() {
 
-	It("Can create application object", func() {
+	It("initiates a deployment job when an application object is created", func() {
 		applicationName := "my-application"
 		applicationNamespace := "default"
 
@@ -63,10 +63,10 @@ var _ = Describe("Application Operator controller", func() {
 				Namespace: applicationNamespace,
 			},
 			Spec: applicationoperatorgithubiov1alpha1.ApplicationSpec{
-				Application: "MyApplication",
-				Environment: "Dev",
+				Application: "my-application",
+				Environment: "dev",
 				Version:     "1",
-				Method:      "SomeMethod",
+				Method:      "test-method",
 				DryRun:      false,
 			},
 		}
@@ -80,7 +80,7 @@ var _ = Describe("Application Operator controller", func() {
 		createdApplication := &applicationoperatorgithubiov1alpha1.Application{}
 
 		//
-		// Check that the appliation object is creeted.
+		// Check that the application object is creeted.
 		//
 		Eventually(func() bool {
 			err := k8sClient.Get(ctx, applicationKey, createdApplication)
@@ -88,14 +88,14 @@ var _ = Describe("Application Operator controller", func() {
 		}).Should(BeTrue())
 
 		//
-		// Check that we have no active jobs.
+		// Check that a job is initiated.
 		//
-		Consistently(func() (int, error) {
+		Eventually(func() (int, error) {
 			err := k8sClient.Get(ctx, applicationKey, createdApplication)
 			if err != nil {
 				return -1, err
 			}
 			return len(createdApplication.Status.Active), nil
-		}).Should(Equal(0))
+		}, 5000, 5000).Should(Equal(1))
 	})
 })
