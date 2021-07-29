@@ -94,3 +94,29 @@ Variables are available in the template through three sources:
 * `.Application` - the resource definition of the application. Components of the application can
   be accessed using e.g. `.Application.Spec.Version`
 * `.env` - a map of all the environment variables. For example, `PATH` is accessed using `{{ .env index 'PATH' }}`
+
+## Setting a webhook
+
+A webhook can be used for notification of deployments that have succeeded or failed.
+
+To set the webhook set the WEBHOOK environment variable for the application operator:
+
+```bash
+export WEBHOOK=http://host/path
+```
+
+When a deployment has completed a HTTP POST request is sent to the URL configured for the webhook with a payload that looks like this:
+
+```json
+{
+  // The type of notification:
+  "eventType": "Failed" or "Succeeded",
+
+  // Details about the job that completed:
+  "environment":        "<the environment of the job>",
+  "application":        "<the application that was deployed>",
+  "configVersion":      "<the version of the configuration for the application>",
+  "applicationVersion": "<the version of the application>"
+
+}
+```

@@ -19,8 +19,10 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -100,15 +102,22 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	//
 	// Sort Jobs into active and completed.
 	//
-	for i, job := range jobs.Items {
+	for _, job := range jobs.Items {
 		_, finishedType := isJobFinished(&job)
 		switch finishedType {
 		case "":
-			activeJobs = append(activeJobs, &jobs.Items[i])
+			activeJobs = append(activeJobs, &job)
 		case batchv1.JobFailed:
-			failedJobs = append(failedJobs, &jobs.Items[i])
+			failedJobs = append(failedJobs, &job)
+			if !containsJob(instance.Status.Failed, job.Name, job.Namespace) {
+				triggerDeploymentWebhook(job, "Failed") // The job has transitioned to failed, trigger failed web hook.
+			}
+
 		case batchv1.JobComplete:
-			successfulJobs = append(successfulJobs, &jobs.Items[i])
+			successfulJobs = append(successfulJobs, &job)
+			if !containsJob(instance.Status.Succeeded, job.Name, job.Namespace) {
+				triggerDeploymentWebhook(job, "Succeeded") // The job has transitioned to success, trigger success web hook.
+			}
 		}
 	}
 
@@ -270,6 +279,15 @@ func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Appli
 		return nil, fmt.Errorf("Couldn't convert template to job: %v", err)
 	}
 
+	if job.Labels == nil {
+		job.Labels = map[string]string{}
+	}
+
+	job.Labels["Environment"] = application.Spec.Environment
+	job.Labels["Application"] = application.Spec.Application
+	job.Labels["ConfigVersion"] = env["CONFIG_VERSION"]
+	job.Labels["ApplicationVersion"] = application.Spec.Version
+
 	return &job, nil
 }
 
@@ -308,4 +326,47 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		// Inform the manager this controller owns some job, automatically call Reconcile when a job changes.
 		Owns(&batchv1.Job{}).
 		Complete(r)
+}
+
+//
+// Triggers the post-deployment webhook to notify if the webhook succeeded or failed.
+//
+func triggerDeploymentWebhook(job batchv1.Job, eventType string) {
+	env := envVarsToMap()
+	webhookUrl := env["WEBHOOK"]
+	if webhookUrl != "" {
+		webhookPayload := map[string]string{
+			"eventType":          eventType,
+			"environment":        job.Labels["Environment"],
+			"application":        job.Labels["Application"],
+			"configVersion":      job.Labels["ConfigVersion"],
+			"applicationVersion": job.Labels["ApplicationVersion"],
+		}
+		httpPost(webhookUrl, webhookPayload)
+	}
+}
+
+//
+// Makes a HTTP post request.
+//
+func httpPost(url string, payload map[string]string) error {
+	postBody, _ := json.Marshal(payload)
+	requestBody := bytes.NewBuffer(postBody)
+
+	_, err := http.Post(url, "application/json", requestBody)
+	return err
+}
+
+//
+// Check if an array contains a particular named job.
+//
+func containsJob(jobs []corev1.ObjectReference, jobName string, jobNamespace string) bool {
+
+	for _, job := range jobs {
+		if job.Name == jobName && job.Namespace == jobNamespace {
+			return true
+		}
+	}
+
+	return false
 }
