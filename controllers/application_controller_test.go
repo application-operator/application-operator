@@ -96,8 +96,8 @@ var _ = Describe("Application Operator controller", func() {
 				return -1, err
 			}
 			return len(createdApplication.Status.Active), nil
-		}, 5000, 5000).Should(Equal(1))
+		}, 5).Should(Equal(1))
 
 		close(done)
-	})
+	}, 7)
 })
