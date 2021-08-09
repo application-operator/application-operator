@@ -52,10 +52,16 @@ var jobOwnerKey = ".metadata.controller"
 
 var log = logf.Log.WithName("controller_application")
 
+//
+// Callback function to invoke a webhook.
+//
+type invokeWebhookFn func(url string, payload map[string]string) error
+
 // ReconcileApplication reconciles a Application object
 type ApplicationReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	InvokeWebhook invokeWebhookFn
 }
 
 //+kubebuilder:rbac:groups=application-operator.github.io,resources=applications,verbs=get;list;watch;create;update;patch;delete
@@ -70,6 +76,11 @@ type ApplicationReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+
+	if r.InvokeWebhook == nil {
+		r.InvokeWebhook = httpPost
+	}
+
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Application")
 
@@ -110,13 +121,13 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		case batchv1.JobFailed:
 			failedJobs = append(failedJobs, &job)
 			if !containsJob(instance.Status.Failed, job.Name, job.Namespace) {
-				triggerDeploymentWebhook(job, "Failed") // The job has transitioned to failed, trigger failed web hook.
+				r.triggerDeploymentWebhook(job, "Failed") // The job has transitioned to failed, trigger failed web hook.
 			}
 
 		case batchv1.JobComplete:
 			successfulJobs = append(successfulJobs, &job)
 			if !containsJob(instance.Status.Succeeded, job.Name, job.Namespace) {
-				triggerDeploymentWebhook(job, "Succeeded") // The job has transitioned to success, trigger success web hook.
+				r.triggerDeploymentWebhook(job, "Succeeded") // The job has transitioned to success, trigger success web hook.
 			}
 		}
 	}
@@ -331,7 +342,7 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //
 // Triggers the post-deployment webhook to notify if the webhook succeeded or failed.
 //
-func triggerDeploymentWebhook(job batchv1.Job, eventType string) {
+func (r *ApplicationReconciler) triggerDeploymentWebhook(job batchv1.Job, eventType string) {
 	env := envVarsToMap()
 	webhookUrl := env["WEBHOOK"]
 	if webhookUrl != "" {
@@ -342,7 +353,7 @@ func triggerDeploymentWebhook(job batchv1.Job, eventType string) {
 			"configVersion":      job.Labels["ConfigVersion"],
 			"applicationVersion": job.Labels["ApplicationVersion"],
 		}
-		httpPost(webhookUrl, webhookPayload)
+		r.InvokeWebhook(webhookUrl, webhookPayload)
 	}
 }
 

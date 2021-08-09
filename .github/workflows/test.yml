@@ -34,4 +34,5 @@ jobs:
     - name: Test
       run: |
         export CONFIG_VERSION=1234
+        export WEBHOOK=http://localhost:80/deployment_completed
         make test
