@@ -120,3 +120,15 @@ When a deployment has completed a HTTP POST request is sent to the URL configure
 
 }
 ```
+
+## Setting a deadline
+
+A default deadline can be imposed on all deployments by setting the environment variable `DEPLOYMENT_DEADLINE` to the maximum number of seconds for which a deployment should run.
+
+For example, this allows the deployment to run for 5 minutes before it is terminated:
+
+```bash
+export DEPLOYMENT_DEADLINE=300
+```
+
+A deployment that exceeds its deadline is placed in the failed state, triggering the webhook with the even type `Failed`.

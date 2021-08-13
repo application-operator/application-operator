@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -298,6 +299,23 @@ func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Appli
 	job.Labels["Application"] = application.Spec.Application
 	job.Labels["ConfigVersion"] = env["CONFIG_VERSION"]
 	job.Labels["ApplicationVersion"] = application.Spec.Version
+
+	if job.Spec.ActiveDeadlineSeconds == nil {
+		configuredDeadline := env["DEPLOYMENT_DEADLINE"]
+
+		var deadline int64
+		if configuredDeadline != "" {
+			parsed, err := strconv.Atoi(env["DEPLOYMENT_DEADLINE"])
+			if err != nil {
+				return nil, fmt.Errorf("Failed to parse integer deadline (seconds) from DEPLOYMENT_DEADLINE environment variable")
+			}
+			deadline = int64(parsed)
+		} else {
+			deadline = 10 * 60 // Default to 10 minutes.
+		}
+
+		job.Spec.ActiveDeadlineSeconds = &deadline
+	}
 
 	return &job, nil
 }
