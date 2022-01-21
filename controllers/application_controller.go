@@ -237,6 +237,15 @@ func (r *ApplicationReconciler) newJobForApplication(application *applicationope
 	env := envVarsToMap()
 	// Note: strings below are truncated to fix the Kubernetes name length of 253 characters.
 
+	bJobId, err := r.triggerStartWebhook(application)
+	if err != nil {
+		return nil, err
+	}
+	jobId := string(bJobId)
+	if jobId == "" {
+		jobId = uuid.New().String()
+	}
+
 	templateVars := &TemplateVars{
 		Application: application,
 		Env:         env,
@@ -268,6 +277,12 @@ func (r *ApplicationReconciler) newJobForApplication(application *applicationope
 	if err != nil {
 		return nil, fmt.Errorf("couldn't convert template to job: %v", err)
 	}
+
+	if job.Labels == nil {
+		job.Labels = map[string]string{}
+	}
+
+	job.Labels["job-id"] = jobId
 
 	if job.Spec.ActiveDeadlineSeconds == nil {
 		configuredDeadline := env["DEPLOYMENT_DEADLINE"]
@@ -342,15 +357,15 @@ func (r *ApplicationReconciler) triggerCompletionWebhook(job batchv1.Job, eventT
 	return nil, nil
 }
 
-func (r *ApplicationReconciler) triggerStartWebhook(job batchv1.Job) ([]byte, error) {
+func (r *ApplicationReconciler) triggerStartWebhook(application *applicationoperatorgithubiov1alpha1.Application) ([]byte, error) {
 	env := envVarsToMap()
 	webhookUrl := env["WEBHOOK_START"]
 	if webhookUrl != "" {
 		webhookPayload := map[string]string{
-			"environment":   job.Labels["Environment"],
-			"application":   job.Labels["Application"],
-			"configVersion": job.Labels["ConfigVersion"],
-			"version":       job.Labels["version"],
+			"environment":   application.Spec.Environment,
+			"application":   application.Spec.Application,
+			"configVersion": env["CONFIG_VERSION"],
+			"version":       application.Spec.Version,
 		}
 		return r.InvokeWebhook(webhookUrl, webhookPayload)
 	}
