@@ -56,7 +56,7 @@ var log = logf.Log.WithName("controller_application")
 //
 // Callback function to invoke a webhook.
 //
-type invokeWebhookFn func(url string, payload map[string]string) error
+type invokeWebhookFn func(url string, payload map[string]string) ([]byte, error)
 
 // ReconcileApplication reconciles a Application object
 type ApplicationReconciler struct {
@@ -232,6 +232,7 @@ type TemplateVars struct {
 	Application *applicationoperatorgithubiov1alpha1.Application
 	Env         map[string]string
 	JobName     string
+	JobId       string
 }
 
 func envVarsToMap() map[string]string {
@@ -263,6 +264,7 @@ func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Appli
 		Application: application,
 		Env:         env,
 		JobName:     jobName,
+		JobId:       jobId,
 	}
 	method := application.Spec.Method
 	if method == "" {
@@ -360,7 +362,7 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //
 // Triggers the post-deployment webhook to notify if the webhook succeeded or failed.
 //
-func (r *ApplicationReconciler) triggerDeploymentWebhook(job batchv1.Job, eventType string) {
+func (r *ApplicationReconciler) triggerDeploymentWebhook(job batchv1.Job, eventType string) ([]byte, error) {
 	env := envVarsToMap()
 	webhookUrl := env["WEBHOOK"]
 	if webhookUrl != "" {
@@ -371,19 +373,25 @@ func (r *ApplicationReconciler) triggerDeploymentWebhook(job batchv1.Job, eventT
 			"configVersion":      job.Labels["ConfigVersion"],
 			"applicationVersion": job.Labels["ApplicationVersion"],
 		}
-		r.InvokeWebhook(webhookUrl, webhookPayload)
+		return r.InvokeWebhook(webhookUrl, webhookPayload)
 	}
+	return nil, nil
 }
 
 //
 // Makes a HTTP post request.
 //
-func httpPost(url string, payload map[string]string) error {
+func httpPost(url string, payload map[string]string) ([]byte, error) {
 	postBody, _ := json.Marshal(payload)
 	requestBody := bytes.NewBuffer(postBody)
 
-	_, err := http.Post(url, "application/json", requestBody)
-	return err
+	response, err := http.Post(url, "application/json", requestBody)
+	if err != nil {
+		return nil, err
+	}
+	var buffer []byte
+	_, err = response.Body.Read(buffer)
+	return buffer, err
 }
 
 //
