@@ -19,8 +19,10 @@ package controllers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"net/http"
 	"os"
 	"path"
 	"strings"
@@ -37,6 +39,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	applicationoperatorgithubiov1alpha1 "github.com/application-operator/application-operator/api/v1alpha1"
+	"github.com/google/uuid"
+	corev1 "k8s.io/api/core/v1"
 )
 
 var log = logf.Log.WithName("controller_application")
@@ -111,6 +115,7 @@ type TemplateVars struct {
 	Application *applicationoperatorgithubiov1alpha1.Application
 	Env         map[string]string
 	JobName     string
+	JobId       string
 }
 
 func envVarsToMap() map[string]string {
@@ -130,11 +135,21 @@ func versionToRFC1123(version string, length int) string {
 
 func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Application) (*batchv1.Job, error) {
 	env := envVarsToMap()
-	jobName := fmt.Sprintf("%s-%s-%s-%s", application.Spec.Environment, application.Spec.Application, versionToRFC1123(env["CONFIG_VERSION"], 13), versionToRFC1123(application.Spec.Version, 13))
+	// Note: strings below are truncated to fix the Kubernetes job name length of 63 characters.
+	jobName := fmt.Sprintf("%s-%s-%s-%s",
+		versionToRFC1123(application.Spec.Environment, 13),
+		versionToRFC1123(application.Spec.Application, 13),
+		versionToRFC1123(env["CONFIG_VERSION"], 13),
+		versionToRFC1123(application.Spec.Version, 13),
+	)
+
+	jobId := uuid.New().String()
+
 	templateVars := &TemplateVars{
 		Application: application,
 		Env:         env,
 		JobName:     jobName,
+		JobId:       jobId,
 	}
 	method := application.Spec.Method
 	if method == "" {
@@ -170,4 +185,53 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&applicationoperatorgithubiov1alpha1.Application{}).
 		Complete(r)
+}
+
+//
+// Triggers the post-deployment webhook to notify if the webhook succeeded or failed.
+//
+func triggerDeploymentWebhook(job batchv1.Job, eventType string) ([]byte, error) {
+	env := envVarsToMap()
+	webhookUrl := env["WEBHOOK"]
+	if webhookUrl != "" {
+		webhookPayload := map[string]string{
+			"eventType":          eventType,
+			"environment":        job.Labels["Environment"],
+			"application":        job.Labels["Application"],
+			"configVersion":      job.Labels["ConfigVersion"],
+			"applicationVersion": job.Labels["ApplicationVersion"],
+		}
+		return httpPost(webhookUrl, webhookPayload)
+	}
+	return nil, nil
+}
+
+//
+// Makes a HTTP post request.
+//
+func httpPost(url string, payload map[string]string) ([]byte, error) {
+	postBody, _ := json.Marshal(payload)
+	requestBody := bytes.NewBuffer(postBody)
+
+	response, err := http.Post(url, "application/json", requestBody)
+	if err != nil {
+		return nil, err
+	}
+	var buffer []byte
+	_, err = response.Body.Read(buffer)
+	return buffer, err
+}
+
+//
+// Check if an array contains a particular named job.
+//
+func containsJob(jobs []corev1.ObjectReference, jobName string, jobNamespace string) bool {
+
+	for _, job := range jobs {
+		if job.Name == jobName && job.Namespace == jobNamespace {
+			return true
+		}
+	}
+
+	return false
 }
