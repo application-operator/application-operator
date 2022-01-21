@@ -187,7 +187,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	//
 	// Define a new Job object
 	//
-	job, err := newJobForApplication(instance)
+	job, err := r.newJobForApplication(instance)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -203,6 +203,19 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	if err != nil && errors.IsNotFound(err) {
 		reqLogger.Info("Creating a new Job", "Job.Namespace", job.Namespace, "Job.Name", job.Name)
 
+		if job.Labels == nil {
+			job.Labels = map[string]string{}
+		}
+
+		bJobId, err := r.triggerStartWebhook(*job)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		jobId := string(bJobId)
+		if jobId == "" {
+			jobId = uuid.New().String()
+		}
+		job.Labels["job-id"] = jobId
 		//
 		// Job doesn't exist, create it.
 		//
@@ -239,7 +252,6 @@ type TemplateVars struct {
 	Application *applicationoperatorgithubiov1alpha1.Application
 	Env         map[string]string
 	JobName     string
-	JobId       string
 }
 
 func envVarsToMap() map[string]string {
@@ -257,7 +269,7 @@ func versionToRFC1123(version string, length int) string {
 	return strings.TrimRight(fmt.Sprintf(format, strings.ReplaceAll(strings.ReplaceAll(version, ".", "-"), "_", "-")), "-")
 }
 
-func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Application) (*batchv1.Job, error) {
+func (r *ApplicationReconciler) newJobForApplication(application *applicationoperatorgithubiov1alpha1.Application) (*batchv1.Job, error) {
 	env := envVarsToMap()
 	// Note: strings below are truncated to fix the Kubernetes name length of 253 characters.
 	jobName := fmt.Sprintf("%s-%s-%s-%s",
@@ -267,20 +279,10 @@ func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Appli
 		versionToRFC1123(application.Spec.Version, 13),
 	)
 
-	bJobId, err := r.triggerStartWebhook(application)
-	if err != nil {
-		return nil, err
-	}
-	jobId := string(bJobId)
-	if jobId == "" {
-		jobId = uuid.New().String()
-	}
-
 	templateVars := &TemplateVars{
 		Application: application,
 		Env:         env,
 		JobName:     jobName,
-		JobId:       jobId,
 	}
 	method := application.Spec.Method
 	if method == "" {
@@ -309,16 +311,6 @@ func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Appli
 		return nil, fmt.Errorf("couldn't convert template to job: %v", err)
 	}
 
-	if job.Labels == nil {
-		job.Labels = map[string]string{}
-	}
-
-	job.Labels["Environment"] = application.Spec.Environment
-	job.Labels["Application"] = application.Spec.Application
-	job.Labels["ConfigVersion"] = env["CONFIG_VERSION"]
-	job.Labels["Version"] = application.Spec.Version
-	job.Labels["job-id"] = jobId
-
 	if job.Spec.ActiveDeadlineSeconds == nil {
 		configuredDeadline := env["DEPLOYMENT_DEADLINE"]
 
@@ -326,7 +318,7 @@ func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Appli
 		if configuredDeadline != "" {
 			parsed, err := strconv.Atoi(env["DEPLOYMENT_DEADLINE"])
 			if err != nil {
-				return nil, fmt.Errorf("Failed to parse integer deadline (seconds) from DEPLOYMENT_DEADLINE environment variable")
+				return nil, fmt.Errorf("failed to parse integer deadline (seconds) from DEPLOYMENT_DEADLINE environment variable")
 			}
 			deadline = int64(parsed)
 		} else {
@@ -367,10 +359,8 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-
 		// Tells the operator framework the type to watch.
 		For(&applicationoperatorgithubiov1alpha1.Application{}).
-
 		// Inform the manager this controller owns some job, automatically call Reconcile when a job changes.
 		Owns(&batchv1.Job{}).
 		Complete(r)
@@ -395,15 +385,15 @@ func (r *ApplicationReconciler) triggerCompletionWebhook(job batchv1.Job, eventT
 	return nil, nil
 }
 
-func (r *ApplicationReconciler) triggerStartWebhook(application *applicationoperatorgithubiov1alpha1.Application) ([]byte, error) {
+func (r *ApplicationReconciler) triggerStartWebhook(job batchv1.Job) ([]byte, error) {
 	env := envVarsToMap()
 	webhookUrl := env["WEBHOOK_START"]
 	if webhookUrl != "" {
 		webhookPayload := map[string]string{
-			"environment":   application.Spec.Environment,
-			"application":   application.Spec.Application,
-			"configVersion": env["CONFIG_VERSION"],
-			"version":       application.Spec.Version,
+			"environment":   job.Labels["Environment"],
+			"application":   job.Labels["Application"],
+			"configVersion": job.Labels["ConfigVersion"],
+			"version":       job.Labels["version"],
 		}
 		return r.InvokeWebhook(webhookUrl, webhookPayload)
 	}
