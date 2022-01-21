@@ -41,6 +41,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	applicationoperatorgithubiov1alpha1 "github.com/application-operator/application-operator/api/v1alpha1"
+	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ref "k8s.io/client-go/tools/reference"
@@ -122,13 +123,19 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		case batchv1.JobFailed:
 			failedJobs = append(failedJobs, &job)
 			if !containsJob(instance.Status.Failed, job.Name, job.Namespace) {
-				r.triggerDeploymentWebhook(job, "Failed") // The job has transitioned to failed, trigger failed web hook.
+				_, err := r.triggerCompletionWebhook(job, "Failed") // The job has transitioned to failed, trigger failed web hook.
+				if err != nil {
+					return reconcile.Result{}, err
+				}
 			}
 
 		case batchv1.JobComplete:
 			successfulJobs = append(successfulJobs, &job)
 			if !containsJob(instance.Status.Succeeded, job.Name, job.Namespace) {
-				r.triggerDeploymentWebhook(job, "Succeeded") // The job has transitioned to success, trigger success web hook.
+				_, err := r.triggerCompletionWebhook(job, "Succeeded") // The job has transitioned to success, trigger success web hook.
+				if err != nil {
+					return reconcile.Result{}, err
+				}
 			}
 		}
 	}
@@ -260,6 +267,15 @@ func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Appli
 		versionToRFC1123(application.Spec.Version, 13),
 	)
 
+	bJobId, err := r.triggerStartWebhook(application)
+	if err != nil {
+		return nil, err
+	}
+	jobId := string(bJobId)
+	if jobId == "" {
+		jobId = uuid.New().String()
+	}
+
 	templateVars := &TemplateVars{
 		Application: application,
 		Env:         env,
@@ -274,23 +290,23 @@ func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Appli
 	if !ok {
 		wd, err := os.Getwd()
 		if err != nil {
-			return nil, fmt.Errorf("Cannot get working directory")
+			return nil, fmt.Errorf("cannot get working directory")
 		}
 		templateDir = path.Join(wd, "templates")
 	}
 	t, err := template.ParseFiles(path.Join(templateDir, fmt.Sprintf("%s-template.yml", method)))
 	if err != nil {
-		return nil, fmt.Errorf("Error reading template file: %v", err)
+		return nil, fmt.Errorf("error reading template file: %v", err)
 	}
 	var buf bytes.Buffer
 	err = t.Execute(&buf, templateVars)
 	if err != nil {
-		return nil, fmt.Errorf("Error templating file: %v", err)
+		return nil, fmt.Errorf("error templating file: %v", err)
 	}
 	var job batchv1.Job
 	err = yaml.Unmarshal(buf.Bytes(), &job)
 	if err != nil {
-		return nil, fmt.Errorf("Couldn't convert template to job: %v", err)
+		return nil, fmt.Errorf("couldn't convert template to job: %v", err)
 	}
 
 	if job.Labels == nil {
@@ -300,7 +316,8 @@ func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Appli
 	job.Labels["Environment"] = application.Spec.Environment
 	job.Labels["Application"] = application.Spec.Application
 	job.Labels["ConfigVersion"] = env["CONFIG_VERSION"]
-	job.Labels["ApplicationVersion"] = application.Spec.Version
+	job.Labels["Version"] = application.Spec.Version
+	job.Labels["job-id"] = jobId
 
 	if job.Spec.ActiveDeadlineSeconds == nil {
 		configuredDeadline := env["DEPLOYMENT_DEADLINE"]
@@ -362,16 +379,31 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 //
 // Triggers the post-deployment webhook to notify if the webhook succeeded or failed.
 //
-func (r *ApplicationReconciler) triggerDeploymentWebhook(job batchv1.Job, eventType string) ([]byte, error) {
+func (r *ApplicationReconciler) triggerCompletionWebhook(job batchv1.Job, eventType string) ([]byte, error) {
 	env := envVarsToMap()
-	webhookUrl := env["WEBHOOK"]
+	webhookUrl := env["WEBHOOK_COMPLETION"]
 	if webhookUrl != "" {
 		webhookPayload := map[string]string{
-			"eventType":          eventType,
-			"environment":        job.Labels["Environment"],
-			"application":        job.Labels["Application"],
-			"configVersion":      job.Labels["ConfigVersion"],
-			"applicationVersion": job.Labels["ApplicationVersion"],
+			"eventType":     eventType,
+			"environment":   job.Labels["Environment"],
+			"application":   job.Labels["Application"],
+			"configVersion": job.Labels["ConfigVersion"],
+			"version":       job.Labels["version"],
+		}
+		return r.InvokeWebhook(webhookUrl, webhookPayload)
+	}
+	return nil, nil
+}
+
+func (r *ApplicationReconciler) triggerStartWebhook(application *applicationoperatorgithubiov1alpha1.Application) ([]byte, error) {
+	env := envVarsToMap()
+	webhookUrl := env["WEBHOOK_START"]
+	if webhookUrl != "" {
+		webhookPayload := map[string]string{
+			"environment":   application.Spec.Environment,
+			"application":   application.Spec.Application,
+			"configVersion": env["CONFIG_VERSION"],
+			"version":       application.Spec.Version,
 		}
 		return r.InvokeWebhook(webhookUrl, webhookPayload)
 	}
