@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	applicationoperatorgithubiov1alpha1 "github.com/application-operator/application-operator/api/v1alpha1"
@@ -313,6 +314,8 @@ var _ = Describe("Application Operator controller", func() {
 		// Reset webhooks count.
 		//
 		NumWebhooksInvoked = 0
+		os.Setenv("WEBHOOK_START", "A")
+		os.Setenv("WEBHOOK_COMPLETION", "B")
 
 		applicationKey, _ := createApplication(applicationName, applicationNamespace, ctx)
 
@@ -361,7 +364,7 @@ var _ = Describe("Application Operator controller", func() {
 		//
 		expectApplicationStatus(applicationKey, ctx, checkSuccessfulDeployment)
 
-		Expect(NumWebhooksInvoked).Should(Equal(1))
+		Expect(NumWebhooksInvoked).Should(Equal(2))
 
 		close(done)
 	}, 7)

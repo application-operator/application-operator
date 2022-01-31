@@ -49,9 +49,9 @@ var NumWebhooksInvoked = 0
 //
 // Makes a mock HTTP POST request.
 //
-func mockHttpPost(url string, payload map[string]string) error {
+func mockHttpPost(url string, payload map[string]string) ([]byte, error) {
 	NumWebhooksInvoked += 1
-	return nil
+	return nil, nil
 }
 
 func TestAPIs(t *testing.T) {
