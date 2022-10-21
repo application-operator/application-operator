@@ -1,4 +1,4 @@
-module github.com/application-operator/application-operator
+module github.com/Skedulo/application-operator
 
 go 1.18
 

@@ -40,7 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
-	applicationoperatorgithubiov1alpha1 "github.com/application-operator/application-operator/api/v1alpha1"
+	applicationoperatorgithubiov1alpha1 "github.com/Skedulo/application-operator/api/v1alpha1"
 	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

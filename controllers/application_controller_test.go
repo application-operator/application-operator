@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	applicationoperatorgithubiov1alpha1 "github.com/application-operator/application-operator/api/v1alpha1"
+	applicationoperatorgithubiov1alpha1 "github.com/Skedulo/application-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sanity-io/litter"
