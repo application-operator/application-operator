@@ -47,16 +47,12 @@ import (
 	ref "k8s.io/client-go/tools/reference"
 )
 
-//
 // The key to index on to find jobs owned by an application instance.
-//
 var jobOwnerKey = ".metadata.controller"
 
 var log = logf.Log.WithName("controller_application")
 
-//
 // Callback function to invoke a webhook.
-//
 type invokeWebhookFn func(url string, payload map[string]string) ([]byte, error)
 
 // ReconcileApplication reconciles a Application object
@@ -235,9 +231,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	return reconcile.Result{}, nil
 }
 
-//
 // Determines if a Job has finished.
-//
 func isJobFinished(job *batchv1.Job) (bool, batchv1.JobConditionType) {
 	for _, c := range job.Status.Conditions {
 		if (c.Type == batchv1.JobComplete || c.Type == batchv1.JobFailed) && c.Status == corev1.ConditionTrue {
@@ -366,15 +360,14 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-//
 // Triggers the post-deployment webhook to notify if the webhook succeeded or failed.
-//
 func (r *ApplicationReconciler) triggerCompletionWebhook(job batchv1.Job, eventType string) ([]byte, error) {
 	env := envVarsToMap()
 	webhookUrl := env["WEBHOOK_COMPLETION"]
 	if webhookUrl != "" {
 		webhookPayload := map[string]string{
 			"eventType":     eventType,
+			"id":            job.Labels["job-id"],
 			"environment":   job.Labels["Environment"],
 			"application":   job.Labels["Application"],
 			"configVersion": job.Labels["ConfigVersion"],
@@ -400,9 +393,7 @@ func (r *ApplicationReconciler) triggerStartWebhook(job batchv1.Job) ([]byte, er
 	return nil, nil
 }
 
-//
 // Makes a HTTP post request.
-//
 func httpPost(url string, payload map[string]string) ([]byte, error) {
 	postBody, _ := json.Marshal(payload)
 	requestBody := bytes.NewBuffer(postBody)
@@ -416,9 +407,7 @@ func httpPost(url string, payload map[string]string) ([]byte, error) {
 	return buffer, err
 }
 
-//
 // Check if an array contains a particular named job.
-//
 func containsJob(jobs []corev1.ObjectReference, jobName string, jobNamespace string) bool {
 
 	for _, job := range jobs {
