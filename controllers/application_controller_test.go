@@ -3,10 +3,11 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
-	applicationoperatorgithubiov1alpha1 "github.com/application-operator/application-operator/api/v1alpha1"
-	. "github.com/onsi/ginkgo"
+	applicationoperatorgithubiov1alpha1 "github.com/Skedulo/application-operator/api/v1alpha1"
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sanity-io/litter"
 	batchv1 "k8s.io/api/batch/v1"
@@ -120,42 +121,42 @@ var _ = Describe("Application Operator controller", func() {
 	// Checks we have one active deployment.
 	//
 	checkSingleActiveDeployment := func(status applicationoperatorgithubiov1alpha1.ApplicationStatus) bool {
-		return len(status.Active) == 1
+		return status.Status == "running"
 	}
 
 	//
 	// Checks there are no active deployments.
 	//
 	checkZeroActiveDeployments := func(status applicationoperatorgithubiov1alpha1.ApplicationStatus) bool {
-		return len(status.Active) == 0
+		return status.Status != "running"
 	}
 
 	//
 	// Checks there is one successful deployment.
 	//
 	checkSuccessfulDeployment := func(status applicationoperatorgithubiov1alpha1.ApplicationStatus) bool {
-		return len(status.Succeeded) == 1
+		return status.Status == "succeeded"
 	}
 
 	//
 	// Checks we have zero failed deployments.
 	//
 	checkZeroFailedDeployments := func(status applicationoperatorgithubiov1alpha1.ApplicationStatus) bool {
-		return len(status.Failed) == 0
+		return status.Status != "failed"
 	}
 
 	//
 	// Checks there is one failed deployment.
 	//
 	checkFailedDeployment := func(status applicationoperatorgithubiov1alpha1.ApplicationStatus) bool {
-		return len(status.Failed) == 1
+		return status.Status == "failed"
 	}
 
 	//
 	// Checks we have zero sucessful deployments.
 	//
 	checkZeroSuccessfulDeployments := func(status applicationoperatorgithubiov1alpha1.ApplicationStatus) bool {
-		return len(status.Succeeded) == 0
+		return status.Status != "succeeded"
 	}
 
 	It("initiates a deployment when an application object is created", func(done Done) {
@@ -169,9 +170,9 @@ var _ = Describe("Application Operator controller", func() {
 		expectApplicationStatus(applicationKey, ctx, checkSingleActiveDeployment)
 
 		close(done)
-	}, 7)
+	})
 
-	It("updates status when deployment has succeeded", func(done Done) {
+	It("updates status when deployment has succeeded", func() {
 		applicationName := "my-app-2"
 		applicationNamespace := "default"
 
@@ -184,7 +185,7 @@ var _ = Describe("Application Operator controller", func() {
 		//
 		// Extract the job name.
 		//
-		activeJobName := createdApplication.Status.Active[0].Name
+		activeJobName := jobName(createdApplication)
 
 		//
 		// Get the details for the deployment job.
@@ -233,11 +234,9 @@ var _ = Describe("Application Operator controller", func() {
 		// There should be zero failed deployments.
 		//
 		expectApplicationStatus(applicationKey, ctx, checkZeroFailedDeployments)
+	})
 
-		close(done)
-	}, 7)
-
-	It("updates status when deployment has failed", func(done Done) {
+	It("updates status when deployment has failed", func() {
 		applicationName := "my-app-3"
 		applicationNamespace := "default"
 
@@ -250,7 +249,7 @@ var _ = Describe("Application Operator controller", func() {
 		//
 		// Extract the job name.
 		//
-		activeJobName := createdApplication.Status.Active[0].Name
+		activeJobName := jobName(createdApplication)
 
 		//
 		// Get the details for the deployment job.
@@ -299,11 +298,9 @@ var _ = Describe("Application Operator controller", func() {
 		// There should be zero successful deployments.
 		//
 		expectApplicationStatus(applicationKey, ctx, checkZeroSuccessfulDeployments)
+	})
 
-		close(done)
-	}, 7)
-
-	It("invokes webhook when deployment has completed", func(done Done) {
+	It("invokes webhook when deployment has completed", func() {
 		applicationName := "my-app-4"
 		applicationNamespace := "default"
 
@@ -313,6 +310,8 @@ var _ = Describe("Application Operator controller", func() {
 		// Reset webhooks count.
 		//
 		NumWebhooksInvoked = 0
+		os.Setenv("WEBHOOK_START", "A")
+		os.Setenv("WEBHOOK_COMPLETION", "B")
 
 		applicationKey, _ := createApplication(applicationName, applicationNamespace, ctx)
 
@@ -321,7 +320,7 @@ var _ = Describe("Application Operator controller", func() {
 		//
 		// Extract the job name.
 		//
-		activeJobName := createdApplication.Status.Active[0].Name
+		activeJobName := jobName(createdApplication)
 
 		//
 		// Get the details for the deployment job.
@@ -361,8 +360,6 @@ var _ = Describe("Application Operator controller", func() {
 		//
 		expectApplicationStatus(applicationKey, ctx, checkSuccessfulDeployment)
 
-		Expect(NumWebhooksInvoked).Should(Equal(1))
-
-		close(done)
-	}, 7)
+		Expect(NumWebhooksInvoked).Should(Equal(2))
+	})
 })

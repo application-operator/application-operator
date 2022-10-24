@@ -32,7 +32,6 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -40,29 +39,26 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
-	applicationoperatorgithubiov1alpha1 "github.com/application-operator/application-operator/api/v1alpha1"
+	applicationoperatorgithubiov1alpha1 "github.com/Skedulo/application-operator/api/v1alpha1"
+	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	ref "k8s.io/client-go/tools/reference"
 )
 
-//
 // The key to index on to find jobs owned by an application instance.
-//
 var jobOwnerKey = ".metadata.controller"
 
 var log = logf.Log.WithName("controller_application")
 
-//
 // Callback function to invoke a webhook.
-//
-type invokeWebhookFn func(url string, payload map[string]string) error
+type invokeWebhookFn func(url string, payload map[string]string) ([]byte, error)
 
 // ReconcileApplication reconciles a Application object
 type ApplicationReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	InvokeWebhook invokeWebhookFn
+	Queue         chan batchv1.Job
 }
 
 //+kubebuilder:rbac:groups=application-operator.github.io,resources=applications,verbs=get;list;watch;create;update;patch;delete
@@ -107,80 +103,59 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		return ctrl.Result{}, err
 	}
 
-	var activeJobs []*batchv1.Job
-	var successfulJobs []*batchv1.Job
-	var failedJobs []*batchv1.Job
+	name := jobName(instance)
+	found := false
 
-	//
-	// Sort Jobs into active and completed.
-	//
 	for _, job := range jobs.Items {
+		if job.Name != name {
+			reqLogger.Info("Deleting job %s", job.Name)
+			r.Delete(ctx, &job)
+			continue
+		}
+		found = true
 		_, finishedType := isJobFinished(&job)
 		switch finishedType {
 		case "":
-			activeJobs = append(activeJobs, &job)
+			if instance.Status.Status != "running" {
+				instance.Status.Status = "running"
+				instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
+			}
 		case batchv1.JobFailed:
-			failedJobs = append(failedJobs, &job)
-			if !containsJob(instance.Status.Failed, job.Name, job.Namespace) {
-				r.triggerDeploymentWebhook(job, "Failed") // The job has transitioned to failed, trigger failed web hook.
+			if instance.Status.Status != "failed" {
+				instance.Status.Status = "failed"
+				_, err := r.triggerCompletionWebhook(job, "Failed") // The job has transitioned to failed, trigger failed web hook.
+				if err != nil {
+					return reconcile.Result{}, err
+				}
+				instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
 			}
-
 		case batchv1.JobComplete:
-			successfulJobs = append(successfulJobs, &job)
-			if !containsJob(instance.Status.Succeeded, job.Name, job.Namespace) {
-				r.triggerDeploymentWebhook(job, "Succeeded") // The job has transitioned to success, trigger success web hook.
+			if instance.Status.Status != "succeeded" {
+				instance.Status.Status = "succeeded"
+				_, err := r.triggerCompletionWebhook(job, "Succeeded") // The job has transitioned to success, trigger success web hook.
+				if err != nil {
+					return reconcile.Result{}, err
+				}
+				instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
 			}
 		}
 	}
 
-	//
-	// Update status of the Application instance.
-	//
-
-	instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
-
-	instance.Status.Active = nil
-	for _, activeJob := range activeJobs {
-		jobRef, err := ref.GetReference(r.Scheme, activeJob)
-		if err != nil {
-			log.Error(err, "Failed to get reference to job", "job", activeJob)
-			continue
+	if found {
+		if err := r.Status().Update(ctx, instance); err != nil {
+			log.Error(err, "unable to update Application status")
+			return ctrl.Result{}, err
 		}
-		instance.Status.Active = append(instance.Status.Active, *jobRef)
-	}
 
-	instance.Status.Succeeded = nil
-	for _, successfulJob := range successfulJobs {
-		jobRef, err := ref.GetReference(r.Scheme, successfulJob)
-		if err != nil {
-			log.Error(err, "Failed to get reference to job", "job", successfulJob)
-			continue
-		}
-		instance.Status.Succeeded = append(instance.Status.Succeeded, *jobRef)
-	}
-
-	instance.Status.Failed = nil
-	for _, failedJob := range failedJobs {
-		jobRef, err := ref.GetReference(r.Scheme, failedJob)
-		if err != nil {
-			log.Error(err, "Failed to get reference to job", "job", failedJob)
-			continue
-		}
-		instance.Status.Failed = append(instance.Status.Failed, *jobRef)
-	}
-
-	//
-	// Save the status of the application.
-	//
-	if err := r.Status().Update(ctx, instance); err != nil {
-		log.Error(err, "unable to update Application status")
-		return ctrl.Result{}, err
+		// Job already exists - don't requeue
+		reqLogger.Info("Skip reconcile: Job already exists", "Job.Namespace", request.Namespace, "Job.Name", name)
+		return reconcile.Result{}, nil
 	}
 
 	//
 	// Define a new Job object
 	//
-	job, err := newJobForApplication(instance)
+	job, err := r.newJobForApplication(instance)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -190,34 +165,34 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Check if this Job already exists
-	found := &batchv1.Job{}
-	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: job.Name, Namespace: job.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		reqLogger.Info("Creating a new Job", "Job.Namespace", job.Namespace, "Job.Name", job.Name)
+	reqLogger.Info("Creating a new Job", "Job.Namespace", job.Namespace, "Job.Name", job.Name)
 
-		//
-		// Job doesn't exist, create it.
-		//
-		err = r.Client.Create(context.TODO(), job)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+	if job.Labels == nil {
+		job.Labels = map[string]string{}
+	}
 
-		// Job created successfully - don't requeue
-		return reconcile.Result{}, nil
-	} else if err != nil {
+	bJobId, err := r.triggerStartWebhook(*job)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	jobId := string(bJobId)
+	if jobId == "" {
+		jobId = uuid.New().String()
+	}
+	job.Labels["job-id"] = jobId
+	//
+	// Job doesn't exist, create it.
+	//
+	err = r.Client.Create(context.TODO(), job)
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// Job already exists - don't requeue
-	reqLogger.Info("Skip reconcile: Job already exists", "Job.Namespace", found.Namespace, "Job.Name", found.Name)
+	// Job created successfully - don't requeue
 	return reconcile.Result{}, nil
 }
 
-//
 // Determines if a Job has finished.
-//
 func isJobFinished(job *batchv1.Job) (bool, batchv1.JobConditionType) {
 	for _, c := range job.Status.Conditions {
 		if (c.Type == batchv1.JobComplete || c.Type == batchv1.JobFailed) && c.Status == corev1.ConditionTrue {
@@ -249,20 +224,23 @@ func versionToRFC1123(version string, length int) string {
 	return strings.TrimRight(fmt.Sprintf(format, strings.ReplaceAll(strings.ReplaceAll(version, ".", "-"), "_", "-")), "-")
 }
 
-func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Application) (*batchv1.Job, error) {
-	env := envVarsToMap()
-	// Note: strings below are truncated to fix the Kubernetes job name length of 63 characters.
-	jobName := fmt.Sprintf("%s-%s-%s-%s",
+func jobName(application *applicationoperatorgithubiov1alpha1.Application) string {
+	return fmt.Sprintf("%s-%s-%s-%s",
 		versionToRFC1123(application.Spec.Environment, 13),
 		versionToRFC1123(application.Spec.Application, 13),
-		versionToRFC1123(env["CONFIG_VERSION"], 13),
+		versionToRFC1123(os.Getenv("CONFIG_VERSION"), 13),
 		versionToRFC1123(application.Spec.Version, 13),
 	)
+}
+
+func (r *ApplicationReconciler) newJobForApplication(application *applicationoperatorgithubiov1alpha1.Application) (*batchv1.Job, error) {
+	env := envVarsToMap()
+	// Note: strings below are truncated to fix the Kubernetes name length of 253 characters.
 
 	templateVars := &TemplateVars{
 		Application: application,
 		Env:         env,
-		JobName:     jobName,
+		JobName:     jobName(application),
 	}
 	method := application.Spec.Method
 	if method == "" {
@@ -272,33 +250,24 @@ func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Appli
 	if !ok {
 		wd, err := os.Getwd()
 		if err != nil {
-			return nil, fmt.Errorf("Cannot get working directory")
+			return nil, fmt.Errorf("cannot get working directory")
 		}
 		templateDir = path.Join(wd, "templates")
 	}
 	t, err := template.ParseFiles(path.Join(templateDir, fmt.Sprintf("%s-template.yml", method)))
 	if err != nil {
-		return nil, fmt.Errorf("Error reading template file: %v", err)
+		return nil, fmt.Errorf("error reading template file: %v", err)
 	}
 	var buf bytes.Buffer
 	err = t.Execute(&buf, templateVars)
 	if err != nil {
-		return nil, fmt.Errorf("Error templating file: %v", err)
+		return nil, fmt.Errorf("error templating file: %v", err)
 	}
 	var job batchv1.Job
 	err = yaml.Unmarshal(buf.Bytes(), &job)
 	if err != nil {
-		return nil, fmt.Errorf("Couldn't convert template to job: %v", err)
+		return nil, fmt.Errorf("couldn't convert template to job: %v", err)
 	}
-
-	if job.Labels == nil {
-		job.Labels = map[string]string{}
-	}
-
-	job.Labels["Environment"] = application.Spec.Environment
-	job.Labels["Application"] = application.Spec.Application
-	job.Labels["ConfigVersion"] = env["CONFIG_VERSION"]
-	job.Labels["ApplicationVersion"] = application.Spec.Version
 
 	if job.Spec.ActiveDeadlineSeconds == nil {
 		configuredDeadline := env["DEPLOYMENT_DEADLINE"]
@@ -307,7 +276,7 @@ func newJobForApplication(application *applicationoperatorgithubiov1alpha1.Appli
 		if configuredDeadline != "" {
 			parsed, err := strconv.Atoi(env["DEPLOYMENT_DEADLINE"])
 			if err != nil {
-				return nil, fmt.Errorf("Failed to parse integer deadline (seconds) from DEPLOYMENT_DEADLINE environment variable")
+				return nil, fmt.Errorf("failed to parse integer deadline (seconds) from DEPLOYMENT_DEADLINE environment variable")
 			}
 			deadline = int64(parsed)
 		} else {
@@ -348,47 +317,61 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-
 		// Tells the operator framework the type to watch.
 		For(&applicationoperatorgithubiov1alpha1.Application{}).
-
 		// Inform the manager this controller owns some job, automatically call Reconcile when a job changes.
 		Owns(&batchv1.Job{}).
 		Complete(r)
 }
 
-//
 // Triggers the post-deployment webhook to notify if the webhook succeeded or failed.
-//
-func (r *ApplicationReconciler) triggerDeploymentWebhook(job batchv1.Job, eventType string) {
+func (r *ApplicationReconciler) triggerCompletionWebhook(job batchv1.Job, eventType string) ([]byte, error) {
 	env := envVarsToMap()
-	webhookUrl := env["WEBHOOK"]
+	webhookUrl := env["WEBHOOK_COMPLETION"]
 	if webhookUrl != "" {
 		webhookPayload := map[string]string{
-			"eventType":          eventType,
-			"environment":        job.Labels["Environment"],
-			"application":        job.Labels["Application"],
-			"configVersion":      job.Labels["ConfigVersion"],
-			"applicationVersion": job.Labels["ApplicationVersion"],
+			"eventType":     eventType,
+			"id":            job.Labels["job-id"],
+			"environment":   job.Labels["Environment"],
+			"application":   job.Labels["Application"],
+			"configVersion": job.Labels["ConfigVersion"],
+			"version":       job.Labels["version"],
 		}
-		r.InvokeWebhook(webhookUrl, webhookPayload)
+		return r.InvokeWebhook(webhookUrl, webhookPayload)
 	}
+	return nil, nil
 }
 
-//
+func (r *ApplicationReconciler) triggerStartWebhook(job batchv1.Job) ([]byte, error) {
+	env := envVarsToMap()
+	webhookUrl := env["WEBHOOK_START"]
+	if webhookUrl != "" {
+		webhookPayload := map[string]string{
+			"environment":   job.Labels["Environment"],
+			"application":   job.Labels["Application"],
+			"configVersion": job.Labels["ConfigVersion"],
+			"version":       job.Labels["version"],
+		}
+		return r.InvokeWebhook(webhookUrl, webhookPayload)
+	}
+	return nil, nil
+}
+
 // Makes a HTTP post request.
-//
-func httpPost(url string, payload map[string]string) error {
+func httpPost(url string, payload map[string]string) ([]byte, error) {
 	postBody, _ := json.Marshal(payload)
 	requestBody := bytes.NewBuffer(postBody)
 
-	_, err := http.Post(url, "application/json", requestBody)
-	return err
+	response, err := http.Post(url, "application/json", requestBody)
+	if err != nil {
+		return nil, err
+	}
+	var buffer []byte
+	_, err = response.Body.Read(buffer)
+	return buffer, err
 }
 
-//
 // Check if an array contains a particular named job.
-//
 func containsJob(jobs []corev1.ObjectReference, jobName string, jobNamespace string) bool {
 
 	for _, job := range jobs {

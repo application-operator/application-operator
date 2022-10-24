@@ -2,7 +2,7 @@ domain: application-operator.github.io
 layout:
 - go.kubebuilder.io/v3
 projectName: application-operator
-repo: github.com/application-operator/application-operator
+repo: github.com/Skedulo/application-operator
 resources:
 - api:
     crdVersion: v1
@@ -10,6 +10,6 @@ resources:
   controller: true
   group: application-operator.github.io
   kind: Application
-  path: github.com/application-operator/application-operator/api/v1alpha1
+  path: github.com/Skedulo/application-operator/api/v1alpha1
   version: v1alpha1
 version: "3"
