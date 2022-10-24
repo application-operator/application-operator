@@ -167,25 +167,18 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 
 	reqLogger.Info("Creating a new Job", "Job.Namespace", job.Namespace, "Job.Name", job.Name)
 
-	if job.Labels == nil {
-		job.Labels = map[string]string{}
-	}
-
-	bJobId, err := r.triggerStartWebhook(*job)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	jobId := string(bJobId)
-	if jobId == "" {
-		jobId = uuid.New().String()
-	}
-	job.Labels["job-id"] = jobId
-	//
-	// Job doesn't exist, create it.
-	//
 	err = r.Client.Create(context.TODO(), job)
 	if err != nil {
 		return reconcile.Result{}, err
+	}
+	instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
+	instance.Status.Status = "created"
+	instance.Status.JobID = job.Labels["job-id"]
+	instance.Status.JobName = name
+
+	if err := r.Status().Update(ctx, instance); err != nil {
+		log.Error(err, "unable to update Application status")
+		return ctrl.Result{}, err
 	}
 
 	// Job created successfully - don't requeue
@@ -384,16 +377,4 @@ func httpPost(url string, payload map[string]string) ([]byte, error) {
 	var buffer []byte
 	_, err = response.Body.Read(buffer)
 	return buffer, err
-}
-
-// Check if an array contains a particular named job.
-func containsJob(jobs []corev1.ObjectReference, jobName string, jobNamespace string) bool {
-
-	for _, job := range jobs {
-		if job.Name == jobName && job.Namespace == jobNamespace {
-			return true
-		}
-	}
-
-	return false
 }
