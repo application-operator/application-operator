@@ -1,4 +1,5 @@
 bin/manager
+helm/charts/*.tgz
 # Created by https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
 ### Emacs ###
 # -*- mode: gitignore; -*-
@@ -73,3 +74,5 @@ tags
 .vscode/*
 .history
 # End of https://www.gitignore.io/api/go,vim,emacs,visualstudiocode
+testbin
+bin

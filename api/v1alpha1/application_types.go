@@ -37,6 +37,9 @@ type ApplicationSpec struct {
 type ApplicationStatus struct {
 	ConfigVersion string      `json:"configVersion"`
 	LastUpdated   metav1.Time `json:"lastUpdated"`
+	Status        string      `json:"status"`
+	JobID         string      `json:"jobId"`
+	JobName       string      `json:"jobName"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

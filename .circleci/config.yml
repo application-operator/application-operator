@@ -1,42 +1,72 @@
 version: 2.1
+orbs:
+  skedulo: skedulo/ci@0.5.3
 
-workflows:
-  build:
-    jobs:
-      - build
+parameters:
+  image:
+    default: skedulo/application-operator
+    type: string
 
 jobs:
-  build:
+  test:
     docker:
-      - image: circleci/golang:1.16.1
+      - image: cimg/go:1.19.2
 
     steps:
       - checkout
-
-      - setup_remote_docker:
-          docker_layer_caching: false
-
-      - restore_cache:
-          keys:
-            - v2-pkg-cache-application-operator
-
       - run:
-          name: "Build docker image"
-          command: docker build -t ${DOCKER_REGISTRY}/${DOCKER_REPO}:${CIRCLE_SHA1} .
-
-      - save_cache:
-          paths:
-            - ~/.cache/go-build
-          key: v2-pkg-cache-application-operator
-
-      - deploy:
-          name: "Upload container to registry"
+          name: Run test suite
           command: |
-            set -eu
-            if [ "$CIRCLE_BRANCH" = "main" -o "$CIRCLE_BRANCH" = "dev" ]; then
-                docker login -u $DOCKER_USER -p $DOCKER_PASS $DOCKER_REGISTRY
-                VTAG="$(git describe --tags)"
-                docker push ${DOCKER_REGISTRY}/${DOCKER_REPO}:${CIRCLE_SHA1}
-                docker tag ${DOCKER_REGISTRY}/${DOCKER_REPO}:${CIRCLE_SHA1} ${DOCKER_REGISTRY}/${DOCKER_REPO}:${VTAG}
-                docker push ${DOCKER_REGISTRY}/${DOCKER_REPO}:${VTAG}
-            fi
+            go test .
+
+workflows:
+  everything:
+    jobs:
+      - test
+      - skedulo/build_and_push_image:
+          name: build_image_<<matrix.executor>>
+          context:
+            - aws-ecr
+            - prisma
+          matrix:
+            parameters:
+              executor:
+                - skedulo/amd64
+                - skedulo/arm64
+          image: <<pipeline.parameters.image>>
+          push: false
+          use_buildkit: true
+          filters:
+            branches:
+              ignore:
+                - main
+          requires:
+            - test
+
+      - skedulo/build_and_push_image:
+          name: build_and_push_image_<<matrix.executor>>
+          context:
+            - aws-ecr
+            - prisma
+          matrix:
+            alias: build_and_push_image
+            parameters:
+              executor:
+                - skedulo/amd64
+                - skedulo/arm64
+          image: <<pipeline.parameters.image>>
+          use_buildkit: true
+          filters:
+            branches:
+              only:
+                - main
+          requires:
+            - test
+
+      - skedulo/create_and_push_manifest:
+          name: create_and_push_manifest
+          context: aws-ecr
+          images: <<pipeline.parameters.image>>:${VERSION_TAG}-amd64,<<pipeline.parameters.image>>:${VERSION_TAG}-arm64
+          manifest: <<pipeline.parameters.image>>
+          requires:
+            - build_and_push_image

@@ -1,0 +1,38 @@
+name: Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - uses: actions/setup-go@v2
+      with:
+        go-version: '1.19.2'
+
+    - name: Setup
+      run: |
+        export DEBIAN_FRONTEND=noninteractive
+        sudo apt-get update 
+        sudo apt-get -yq install curl
+        sudo apt-get -yq install make
+        sudo apt-get -yq install gcc       
+
+    - name: Install Kubebuilder
+      run: |
+        curl -L -o kubebuilder https://go.kubebuilder.io/dl/latest/$(go env GOOS)/$(go env GOARCH)
+        chmod +x kubebuilder
+        sudo mv kubebuilder /usr/local/bin/        
+
+    - name: Test
+      run: |
+        export CONFIG_VERSION=1234
+        export WEBHOOK=http://localhost:80/deployment_completed
+        make test

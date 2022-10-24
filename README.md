@@ -9,18 +9,34 @@ application-operator relies on a few things being explicitly set
 
 ## Installation
 
+* Create the `applications` namespace:
+  ```
+  kubectl create namespace applications
+  ```
+* Make sure you are using `applications` as your default namespace.
+  ```
+  kubens applications 
+  ```
 * Install the Custom Resource Definition:
   ```
-  kubectl apply -k config/crd
+  kubectl create namespace applications
+  ```
+* Alternately apply the CRD like this:
+  ```
+  make install
+  ```
+* Add the sample configuration (this also includes some RBAC to do the job. Here we only allow 
+  it to modify resources in the `applications` namespace but typically you'll want a ClusterRole):
+  ```
+  kubectl apply -k config/samples
   ```
 * Install the operator (for some reason `kubectl apply -k` fails but `kustomize | kubectl` works:
   ```
   kustomize build config/default | kubectl apply -f -
   ```
-* Add the sample configuration (this also includes some RBAC to do the job. Here we only allow 
-  it to modify resources in the `applications` namespace but typically you'll want a ClusterRole):
+* Alternately run the operator locally:
   ```
-  kubectl apply -k config/sample
+  make run
   ```
 * Add a test application:
   ```
@@ -35,6 +51,15 @@ application-operator relies on a few things being explicitly set
 * Doing the same but with prod-docker-debug should create two replicas, and visiting the service
   should show the green docker-debug
 
+* NOTE: To run locally using `make run` I had to copy `demo-template.yaml` to a `templates` sub-directory.
+* NOTE: The env vars on `.env` need to be mapped to local environment variables.
+
+* Run tests
+
+  ```bash
+  export CONFIG_VERSION=1243
+  make test
+  ```
 
 ## Using a bespoke application template
 
@@ -68,3 +93,41 @@ Variables are available in the template through three sources:
 * `.Application` - the resource definition of the application. Components of the application can
   be accessed using e.g. `.Application.Spec.Version`
 * `.env` - a map of all the environment variables. For example, `PATH` is accessed using `{{ .env index 'PATH' }}`
+
+## Setting a webhook
+
+A webhook can be used for notification of deployments that have succeeded or failed.
+
+To set the webhook set the WEBHOOK environment variable for the application operator:
+
+```bash
+export WEBHOOK=http://host/path
+```
+
+When a deployment has completed a HTTP POST request is sent to the URL configured for the webhook with a payload that looks like this:
+
+```json
+{
+  // The type of notification:
+  "eventType": "Failed" or "Succeeded",
+
+  // Details about the job that completed:
+  "environment":        "<the environment of the job>",
+  "application":        "<the application that was deployed>",
+  "configVersion":      "<the version of the configuration for the application>",
+  "applicationVersion": "<the version of the application>"
+
+}
+```
+
+## Setting a deadline
+
+A default deadline can be imposed on all deployments by setting the environment variable `DEPLOYMENT_DEADLINE` to the maximum number of seconds for which a deployment should run.
+
+For example, this allows the deployment to run for 5 minutes before it is terminated:
+
+```bash
+export DEPLOYMENT_DEADLINE=300
+```
+
+A deployment that exceeds its deadline is placed in the failed state, triggering the webhook with the even type `Failed`.
