@@ -243,7 +243,7 @@ func (r *ApplicationReconciler) newJobForApplication(application *applicationope
 	templateVars := &TemplateVars{
 		Application: application,
 		Env:         env,
-		JobName:     jobName(application)
+		JobName:     jobName(application),
 	}
 	method := application.Spec.Method
 	if method == "" {
