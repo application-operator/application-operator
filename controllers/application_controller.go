@@ -200,6 +200,7 @@ type TemplateVars struct {
 	Application *applicationoperatorgithubiov1alpha1.Application
 	Env         map[string]string
 	JobName     string
+	JobId       string
 }
 
 func envVarsToMap() map[string]string {
@@ -242,7 +243,7 @@ func (r *ApplicationReconciler) newJobForApplication(application *applicationope
 	templateVars := &TemplateVars{
 		Application: application,
 		Env:         env,
-		JobName:     jobName(application),
+		JobName:     jobName(application)
 	}
 	method := application.Spec.Method
 	if method == "" {
@@ -361,11 +362,13 @@ func (r *ApplicationReconciler) triggerStartWebhook(application *applicationoper
 			"version":       application.Spec.Version,
 		}
 		return r.InvokeWebhook(webhookUrl, webhookPayload)
+
 	}
 	return nil, nil
 }
 
 // Makes a HTTP post request.
+
 func httpPost(url string, payload map[string]string) ([]byte, error) {
 	postBody, _ := json.Marshal(payload)
 	requestBody := bytes.NewBuffer(postBody)
