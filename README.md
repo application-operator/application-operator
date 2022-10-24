@@ -19,13 +19,12 @@ application-operator relies on a few things being explicitly set
   ```
 * Install the Custom Resource Definition:
   ```
-  kubectl apply -k config/crd
+  kubectl create namespace applications
   ```
 * Alternately apply the CRD like this:
   ```
   make install
   ```
-
 * Add the sample configuration (this also includes some RBAC to do the job. Here we only allow 
   it to modify resources in the `applications` namespace but typically you'll want a ClusterRole):
   ```
@@ -67,7 +66,7 @@ application-operator relies on a few things being explicitly set
 You will need a container that can do deployments. The example job template assumes
 that the container can run `./deploy.sh resource application environment version` and that will
 do the trick. The underlying mechanism is up to you - 
-[Skedulo/application-operator-demo](https://github.com/Skedulo/application-operator-demo)
+[application-operator/application-operator-demo](https://github.com/application-operator/application-operator-demo)
 container uses kustomize to generate slightly different configuration based on environment.
 
 This container should either mount the configuration (e.g. from a git-sync sidecar

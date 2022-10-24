@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	applicationoperatorgithubiov1alpha1 "github.com/Skedulo/application-operator/api/v1alpha1"
+	applicationoperatorgithubiov1alpha1 "github.com/application-operator/application-operator/api/v1alpha1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/sanity-io/litter"
@@ -159,7 +159,7 @@ var _ = Describe("Application Operator controller", func() {
 		return status.Status != "succeeded"
 	}
 
-	It("initiates a deployment when an application object is created", func(done Done) {
+	It("initiates a deployment when an application object is created", func() {
 		applicationName := "my-app-1"
 		applicationNamespace := "default"
 
@@ -168,8 +168,6 @@ var _ = Describe("Application Operator controller", func() {
 		applicationKey, _ := createApplication(applicationName, applicationNamespace, ctx)
 
 		expectApplicationStatus(applicationKey, ctx, checkSingleActiveDeployment)
-
-		close(done)
 	})
 
 	It("updates status when deployment has succeeded", func() {

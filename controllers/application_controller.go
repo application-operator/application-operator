@@ -39,7 +39,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
-	applicationoperatorgithubiov1alpha1 "github.com/Skedulo/application-operator/api/v1alpha1"
+	applicationoperatorgithubiov1alpha1 "github.com/application-operator/application-operator/api/v1alpha1"
 	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -167,25 +167,18 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 
 	reqLogger.Info("Creating a new Job", "Job.Namespace", job.Namespace, "Job.Name", job.Name)
 
-	if job.Labels == nil {
-		job.Labels = map[string]string{}
-	}
-
-	bJobId, err := r.triggerStartWebhook(*job)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	jobId := string(bJobId)
-	if jobId == "" {
-		jobId = uuid.New().String()
-	}
-	job.Labels["job-id"] = jobId
-	//
-	// Job doesn't exist, create it.
-	//
 	err = r.Client.Create(context.TODO(), job)
 	if err != nil {
 		return reconcile.Result{}, err
+	}
+	instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
+	instance.Status.Status = "created"
+	instance.Status.JobID = job.Labels["job-id"]
+	instance.Status.JobName = name
+
+	if err := r.Status().Update(ctx, instance); err != nil {
+		log.Error(err, "unable to update Application status")
+		return ctrl.Result{}, err
 	}
 
 	// Job created successfully - don't requeue
@@ -207,6 +200,7 @@ type TemplateVars struct {
 	Application *applicationoperatorgithubiov1alpha1.Application
 	Env         map[string]string
 	JobName     string
+	JobId       string
 }
 
 func envVarsToMap() map[string]string {
@@ -236,6 +230,15 @@ func jobName(application *applicationoperatorgithubiov1alpha1.Application) strin
 func (r *ApplicationReconciler) newJobForApplication(application *applicationoperatorgithubiov1alpha1.Application) (*batchv1.Job, error) {
 	env := envVarsToMap()
 	// Note: strings below are truncated to fix the Kubernetes name length of 253 characters.
+
+	bJobId, err := r.triggerStartWebhook(application)
+	if err != nil {
+		return nil, err
+	}
+	jobId := string(bJobId)
+	if jobId == "" {
+		jobId = uuid.New().String()
+	}
 
 	templateVars := &TemplateVars{
 		Application: application,
@@ -268,6 +271,12 @@ func (r *ApplicationReconciler) newJobForApplication(application *applicationope
 	if err != nil {
 		return nil, fmt.Errorf("couldn't convert template to job: %v", err)
 	}
+
+	if job.Labels == nil {
+		job.Labels = map[string]string{}
+	}
+
+	job.Labels["job-id"] = jobId
 
 	if job.Spec.ActiveDeadlineSeconds == nil {
 		configuredDeadline := env["DEPLOYMENT_DEADLINE"]
@@ -342,22 +351,24 @@ func (r *ApplicationReconciler) triggerCompletionWebhook(job batchv1.Job, eventT
 	return nil, nil
 }
 
-func (r *ApplicationReconciler) triggerStartWebhook(job batchv1.Job) ([]byte, error) {
+func (r *ApplicationReconciler) triggerStartWebhook(application *applicationoperatorgithubiov1alpha1.Application) ([]byte, error) {
 	env := envVarsToMap()
 	webhookUrl := env["WEBHOOK_START"]
 	if webhookUrl != "" {
 		webhookPayload := map[string]string{
-			"environment":   job.Labels["Environment"],
-			"application":   job.Labels["Application"],
-			"configVersion": job.Labels["ConfigVersion"],
-			"version":       job.Labels["version"],
+			"environment":   application.Spec.Environment,
+			"application":   application.Spec.Application,
+			"configVersion": env["CONFIG_VERSION"],
+			"version":       application.Spec.Version,
 		}
 		return r.InvokeWebhook(webhookUrl, webhookPayload)
+
 	}
 	return nil, nil
 }
 
 // Makes a HTTP post request.
+
 func httpPost(url string, payload map[string]string) ([]byte, error) {
 	postBody, _ := json.Marshal(payload)
 	requestBody := bytes.NewBuffer(postBody)
@@ -369,16 +380,4 @@ func httpPost(url string, payload map[string]string) ([]byte, error) {
 	var buffer []byte
 	_, err = response.Body.Read(buffer)
 	return buffer, err
-}
-
-// Check if an array contains a particular named job.
-func containsJob(jobs []corev1.ObjectReference, jobName string, jobNamespace string) bool {
-
-	for _, job := range jobs {
-		if job.Name == jobName && job.Namespace == jobNamespace {
-			return true
-		}
-	}
-
-	return false
 }
