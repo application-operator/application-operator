@@ -17,7 +17,6 @@ limitations under the License.
 package v1alpha1
 
 import (
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -38,18 +37,7 @@ type ApplicationSpec struct {
 type ApplicationStatus struct {
 	ConfigVersion string      `json:"configVersion"`
 	LastUpdated   metav1.Time `json:"lastUpdated"`
-
-	// Currently deployments.
-	// +optional
-	Active []corev1.ObjectReference `json:"active,omitempty"`
-
-	// Succeeded deployments.
-	// +optional
-	Succeeded []corev1.ObjectReference `json:"succeeded,omitempty"`
-
-	// Failed deployments.
-	// +optional
-	Failed []corev1.ObjectReference `json:"failed,omitempty"`
+	Status        string      `json:"status"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
