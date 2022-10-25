@@ -2,14 +2,9 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-fluentd:
-  dashboards:
-    enabled: false
-  metrics:
-    prometheusRule:
-      enabled: false
-
 fluent-bit:
+  podSecurityPolicy:
+    create: false
   config:
     service: |
       [SERVICE]
@@ -61,7 +56,7 @@ fluent-bit:
 
       [OUTPUT]
           Name http
-          Match *_{{ .Release.namespace }}_*
+          Match *_{{ .Release.Namespace }}_*
           Host application-api
           Uri logs
           Format json_lines

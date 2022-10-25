@@ -1,16 +1,15 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "fluentd.fullname" . }}
+  name: {{ include "application-operator.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "fluentd.labels" . | nindent 4 }}
+    {{- include "application-operator.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
   selector:
     matchLabels:
-      {{- include "fluentd.selectorLabels" . | nindent 6 }}
+      {{- include "application-operator.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -18,13 +17,13 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "fluentd.selectorLabels" . | nindent 8 }}
+        {{- include "application-operator.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "fluentd.serviceAccountName" . }}
+      serviceAccountName: {{ include "application-operator.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
