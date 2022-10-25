@@ -1,15 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "application-operator.fullname" . }}
-  namespace: {{ .Release.namespace }}
+  name: {{ include "application-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "application-operator.labels" . | nindent 4 }}
+    {{- include "application-api.labels" . | nindent 4 }}
 spec:
+  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
+  {{- end }}
   selector:
     matchLabels:
-      {{- include "application-operator.selectorLabels" . | nindent 6 }}
+      {{- include "application-api.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -17,13 +19,13 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "application-operator.selectorLabels" . | nindent 8 }}
+        {{- include "application-api.selectorLabels" . | nindent 8 }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "application-operator.serviceAccountName" . }}
+      serviceAccountName: {{ include "application-api.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
