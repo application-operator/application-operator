@@ -34,8 +34,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
@@ -323,9 +325,9 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		// Tells the operator framework the type to watch.
-		For(&applicationoperatorgithubiov1alpha1.Application{}).
-		// Inform the manager this controller owns some job, automatically call Reconcile when a job changes.
+		// Watch Application resources, but ignore Application.Status changes
+		For(&applicationoperatorgithubiov1alpha1.Application{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		// Also watch Job resources (we want to know about Job Status to track success/failure in Application)
 		Owns(&batchv1.Job{}).
 		Complete(r)
 }
