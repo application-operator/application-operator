@@ -108,7 +108,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 
 	for _, job := range jobs.Items {
 		if job.Name != name {
-			reqLogger.Info("Deleting job %s", job.Name)
+			reqLogger.Info("Deleting job", "job.Name", job.Name)
 			r.Delete(ctx, &job)
 			continue
 		}
