@@ -29,13 +29,13 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
@@ -47,8 +47,6 @@ import (
 
 // The key to index on to find jobs owned by an application instance.
 var jobOwnerKey = ".metadata.controller"
-
-var log = logf.Log.WithName("controller_application")
 
 // Callback function to invoke a webhook.
 type invokeWebhookFn func(url string, payload map[string]string) ([]byte, error)
@@ -78,8 +76,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		r.InvokeWebhook = httpPost
 	}
 
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling Application")
+	log.Infof("Reconciling Application %s/%s", request.Namespace, request.Name)
 
 	// Fetch the Application instance
 	instance := &applicationoperatorgithubiov1alpha1.Application{}
@@ -108,7 +105,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 
 	for _, job := range jobs.Items {
 		if job.Name != name {
-			reqLogger.Info("Deleting job", "job.Name", job.Name)
+			log.Infof("Deleting job %s", job.Name)
 			r.Delete(ctx, &job)
 			continue
 		}
@@ -148,7 +145,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		}
 
 		// Job already exists - don't requeue
-		reqLogger.Info("Skip reconcile: Job already exists", "Job.Namespace", request.Namespace, "Job.Name", name)
+		log.Infof("Skip reconcile: Job %s/%s already exists", request.Namespace, name)
 		return reconcile.Result{}, nil
 	}
 
@@ -165,7 +162,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info("Creating a new Job", "Job.Namespace", job.Namespace, "Job.Name", job.Name)
+	log.Info("Creating a new Job %s/%s", job.Namespace, job.Name)
 
 	err = r.Client.Create(context.TODO(), job)
 	if err != nil {
