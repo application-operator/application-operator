@@ -27,7 +27,7 @@ spec:
     - description: The version of the application
       jsonPath: .spec.version
       name: Version
-      type: integer
+      type: string
     - description: The version of the last applied configuration
       jsonPath: .status.configVersion
       name: Config
