@@ -58,5 +58,5 @@ fluent-bit:
           Name http
           Match *_{{ .Release.Namespace }}_*
           Host application-api
-          Uri logs
+          Uri logs/
           Format json_lines
