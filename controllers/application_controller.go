@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
@@ -182,6 +183,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	instance.Status.Status = "created"
 	instance.Status.JobID = job.Labels["job-id"]
 	instance.Status.JobName = name
+	instance.Status.ConfigVersion = os.Getenv("CONFIG_VERSION")
 
 	if err := r.Status().Update(ctx, instance); err != nil {
 		log.Errorf("unable to update Application status: %v", err)
@@ -305,6 +307,15 @@ func (r *ApplicationReconciler) newJobForApplication(application *applicationope
 	return &job, nil
 }
 
+type NotDeletionPredicate struct {
+	predicate.Funcs
+}
+
+// ignore deletions
+func (NotDeletionPredicate) Delete(e event.DeleteEvent) bool {
+	return false
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
@@ -334,7 +345,14 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 	return ctrl.NewControllerManagedBy(mgr).
 		// Watch Application resources, but ignore Application.Status changes
-		For(&applicationoperatorgithubiov1alpha1.Application{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
+		For(&applicationoperatorgithubiov1alpha1.Application{},
+			builder.WithPredicates(
+				predicate.And(
+					predicate.GenerationChangedPredicate{},
+					NotDeletionPredicate{},
+				),
+			),
+		).
 		// Also watch Job resources (we want to know about Job Status to track success/failure in Application)
 		Owns(&batchv1.Job{}).
 		Complete(r)

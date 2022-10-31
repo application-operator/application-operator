@@ -49,7 +49,7 @@ type ApplicationStatus struct {
 // +kubebuilder:resource:path=applications,scope=Namespaced
 // +kubebuilder:printcolumn:name="Application",type=string,JSONPath=`.spec.application`,description=`The name of the application`
 // +kubebuilder:printcolumn:name="Environment",type=string,JSONPath=`.spec.environment`,description=`The environment in which the application lives`
-// +kubebuilder:printcolumn:name="Version",type=integer,JSONPath=`.spec.version`,description=`The version of the application`
+// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.spec.version`,description=`The version of the application`
 // +kubebuilder:printcolumn:name="Config",type=string,JSONPath=`.status.configVersion`,description=`The version of the last applied configuration`
 // +kubebuilder:printcolumn:name="Last Updated",type=date,JSONPath=`.status.lastUpdated`,description=`The time the application was last updated`
 type Application struct {
