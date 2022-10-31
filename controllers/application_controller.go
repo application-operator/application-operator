@@ -78,7 +78,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		r.InvokeWebhook = httpPost
 	}
 
-	log.Infof("Reconciling Application %s/%s", request.Namespace, request.Name)
+	log.Infof("reconciling Application %s/%s", request.Namespace, request.Name)
 
 	// Fetch the Application instance
 	instance := &applicationoperatorgithubiov1alpha1.Application{}
@@ -91,14 +91,17 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
+		log.Errorf("couldn't get application object: %v", err)
 		return reconcile.Result{}, err
 	}
+	log.Infof("found Application %s/%s version %d", instance.Name, instance.Namespace, instance.Generation)
 
 	//
 	// Find Jobs for the application instance.
 	//
 	var jobs batchv1.JobList
 	if err := r.List(ctx, &jobs, client.InNamespace(request.Namespace), client.MatchingFields{jobOwnerKey: request.Name}); err != nil {
+		log.Errorf("couldn't list jobs: %v", err)
 		return ctrl.Result{}, err
 	}
 
@@ -107,7 +110,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 
 	for _, job := range jobs.Items {
 		if job.Name != name {
-			log.Infof("Deleting job %s", job.Name)
+			log.Infof("deleting job %s", job.Name)
 			r.Delete(ctx, &job)
 			continue
 		}
@@ -124,6 +127,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 				instance.Status.Status = "failed"
 				_, err := r.triggerCompletionWebhook(job, "Failed") // The job has transitioned to failed, trigger failed web hook.
 				if err != nil {
+					log.Errorf("couldn't send failure webhook: %v", err)
 					return reconcile.Result{}, err
 				}
 				instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
@@ -133,6 +137,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 				instance.Status.Status = "succeeded"
 				_, err := r.triggerCompletionWebhook(job, "Succeeded") // The job has transitioned to success, trigger success web hook.
 				if err != nil {
+					log.Errorf("couldn't send success webhook: %v", err)
 					return reconcile.Result{}, err
 				}
 				instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
@@ -142,12 +147,12 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 
 	if found {
 		if err := r.Status().Update(ctx, instance); err != nil {
-			log.Error(err, "unable to update Application status")
+			log.Errorf("unable to update Application status: %v", err)
 			return ctrl.Result{}, err
 		}
 
 		// Job already exists - don't requeue
-		log.Infof("Skip reconcile: Job %s/%s already exists", request.Namespace, name)
+		log.Infof("skip reconcile: Job %s/%s already exists", request.Namespace, name)
 		return reconcile.Result{}, nil
 	}
 
@@ -156,18 +161,21 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	//
 	job, err := r.newJobForApplication(instance)
 	if err != nil {
+		log.Errorf("couldn't create new job object: %v", err)
 		return reconcile.Result{}, err
 	}
 
 	// Set Application instance as the owner and controller
 	if err = controllerutil.SetControllerReference(instance, job, r.Scheme); err != nil {
+		log.Errorf("couldn't set %s as owner of job: %v", instance.Name, err)
 		return reconcile.Result{}, err
 	}
 
-	log.Info("Creating a new Job %s/%s", job.Namespace, job.Name)
+	log.Infof("Creating a new Job %s/%s", job.Namespace, job.Name)
 
 	err = r.Client.Create(context.TODO(), job)
 	if err != nil {
+		log.Errorf("couldn't create job %s: %v", job.Name, err)
 		return reconcile.Result{}, err
 	}
 	instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
@@ -176,7 +184,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	instance.Status.JobName = name
 
 	if err := r.Status().Update(ctx, instance); err != nil {
-		log.Error(err, "unable to update Application status")
+		log.Errorf("unable to update Application status: %v", err)
 		return ctrl.Result{}, err
 	}
 
