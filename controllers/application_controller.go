@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"os"
 	"path"
@@ -131,6 +132,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 					log.Errorf("couldn't send failure webhook: %v", err)
 					return reconcile.Result{}, err
 				}
+				log.Debugf("job %s/%s has failed", job.Namespace, job.Name)
 				instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
 			}
 		case batchv1.JobComplete:
@@ -141,6 +143,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 					log.Errorf("couldn't send success webhook: %v", err)
 					return reconcile.Result{}, err
 				}
+				log.Debugf("job %s/%s has succeeded", job.Namespace, job.Name)
 				instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
 			}
 		}
@@ -246,6 +249,7 @@ func (r *ApplicationReconciler) newJobForApplication(application *applicationope
 	}
 	jobId := string(bJobId)
 	if jobId == "" {
+		log.Infof("couldn't convert webhook result %v to string", bJobId)
 		jobId = uuid.New().String()
 	}
 
@@ -388,8 +392,8 @@ func (r *ApplicationReconciler) triggerStartWebhook(application *applicationoper
 			"version":       application.Spec.Version,
 		}
 		return r.InvokeWebhook(webhookUrl, webhookPayload)
-
 	}
+	log.Warnf("no webhook found")
 	return nil, nil
 }
 
@@ -401,9 +405,9 @@ func httpPost(url string, payload map[string]string) ([]byte, error) {
 
 	response, err := http.Post(url, "application/json", requestBody)
 	if err != nil {
+		log.Errorf("received error from %s: %v", url, err)
 		return nil, err
 	}
-	var buffer []byte
-	_, err = response.Body.Read(buffer)
-	return buffer, err
+	defer response.Body.Close()
+	return io.ReadAll(response.Body)
 }
