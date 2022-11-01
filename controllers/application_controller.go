@@ -253,6 +253,7 @@ func (r *ApplicationReconciler) newJobForApplication(application *applicationope
 		Application: application,
 		Env:         env,
 		JobName:     jobName(application),
+		JobId:       jobId,
 	}
 	method := application.Spec.Method
 	if method == "" {
