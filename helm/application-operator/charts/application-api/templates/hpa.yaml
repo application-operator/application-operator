@@ -2,14 +2,15 @@
 apiVersion: autoscaling/v2beta1
 kind: HorizontalPodAutoscaler
 metadata:
-  name: {{ include "fluentd.fullname" . }}
+  name: {{ include "application-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "fluentd.labels" . | nindent 4 }}
+    {{- include "application-api.labels" . | nindent 4 }}
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: {{ include "fluentd.fullname" . }}
+    name: {{ include "application-api.fullname" . }}
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:

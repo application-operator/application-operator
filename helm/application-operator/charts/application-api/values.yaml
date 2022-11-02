@@ -1,12 +1,13 @@
 image:
   repository: 208503650764.dkr.ecr.us-west-2.amazonaws.com/skedulo/application-api
   pullPolicy: IfNotPresent
+  tag: v0.1-8-g212ac83
 
 replicaCount: 1
 
 imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
+nameOverride: application-api
+fullnameOverride: application-api
 
 serviceAccount:
   # Specifies whether a service account should be created
