@@ -53,7 +53,7 @@ import (
 var jobOwnerKey = ".metadata.controller"
 
 // Callback function to invoke a webhook.
-type invokeWebhookFn func(url string, payload map[string]string) ([]byte, error)
+type invokeWebhookFn func(url string, payload Change) ([]byte, error)
 
 // ReconcileApplication reconciles a Application object
 type ApplicationReconciler struct {
@@ -127,7 +127,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		case batchv1.JobFailed:
 			if instance.Status.Status != "failed" {
 				instance.Status.Status = "failed"
-				_, err := r.triggerCompletionWebhook(job, "Failed") // The job has transitioned to failed, trigger failed web hook.
+				_, err := r.triggerCompletionWebhook(job, false) // The job has transitioned to failed, trigger failed web hook.
 				if err != nil {
 					log.Errorf("couldn't send failure webhook: %v", err)
 					return reconcile.Result{}, err
@@ -138,7 +138,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		case batchv1.JobComplete:
 			if instance.Status.Status != "succeeded" {
 				instance.Status.Status = "succeeded"
-				_, err := r.triggerCompletionWebhook(job, "Succeeded") // The job has transitioned to success, trigger success web hook.
+				_, err := r.triggerCompletionWebhook(job, true) // The job has transitioned to success, trigger success web hook.
 				if err != nil {
 					log.Errorf("couldn't send success webhook: %v", err)
 					return reconcile.Result{}, err
@@ -243,14 +243,17 @@ func (r *ApplicationReconciler) newJobForApplication(application *applicationope
 	env := envVarsToMap()
 	// Note: strings below are truncated to fix the Kubernetes name length of 253 characters.
 
-	bJobId, err := r.triggerStartWebhook(application)
-	if err != nil {
-		return nil, err
-	}
-	jobId := string(bJobId)
+	jobId := application.Status.JobID
 	if jobId == "" {
-		log.Infof("couldn't convert webhook result %v to string", bJobId)
-		jobId = uuid.New().String()
+		bJobId, err := r.triggerStartWebhook(application)
+		if err != nil {
+			return nil, err
+		}
+		jobId = string(bJobId)
+		if jobId == "" {
+			log.Infof("couldn't convert webhook result %v to string", bJobId)
+			jobId = uuid.New().String()
+		}
 	}
 
 	templateVars := &TemplateVars{
@@ -363,18 +366,32 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
+type Change struct {
+	Success       bool      `json:"success,omitempty"`
+	Changed       bool      `json:"changed,omitempty"`
+	ID            string    `json:"id,omitempty"`
+	Environment   string    `json:"environment"`
+	Application   string    `json:"application"`
+	Version       string    `json:"version"`
+	Instance      string    `json:"instance,omitempty"`
+	ConfigVersion string    `json:"config_version"`
+	Started       time.Time `json:"started,omitempty"`
+	Finished      time.Time `json:"finished,omitempty"`
+}
+
 // Triggers the post-deployment webhook to notify if the webhook succeeded or failed.
-func (r *ApplicationReconciler) triggerCompletionWebhook(job batchv1.Job, eventType string) ([]byte, error) {
-	env := envVarsToMap()
-	webhookUrl := env["WEBHOOK_COMPLETION"]
+func (r *ApplicationReconciler) triggerCompletionWebhook(job batchv1.Job, success bool) ([]byte, error) {
+	webhookUrl := os.Getenv("WEBHOOK_COMPLETION")
 	if webhookUrl != "" {
-		webhookPayload := map[string]string{
-			"eventType":     eventType,
-			"id":            job.Labels["job-id"],
-			"environment":   job.Labels["Environment"],
-			"application":   job.Labels["Application"],
-			"configVersion": job.Labels["ConfigVersion"],
-			"version":       job.Labels["version"],
+		webhookPayload := Change{
+			Success:       success,
+			ID:            job.Labels["job-id"],
+			Environment:   job.Labels["Environment"],
+			Application:   job.Labels["Application"],
+			ConfigVersion: job.Labels["ConfigVersion"],
+			Version:       job.Labels["version"],
+			Instance:      os.Getenv("INSTANCE"),
+			Finished:      time.Now(),
 		}
 		return r.InvokeWebhook(webhookUrl, webhookPayload)
 	}
@@ -382,14 +399,15 @@ func (r *ApplicationReconciler) triggerCompletionWebhook(job batchv1.Job, eventT
 }
 
 func (r *ApplicationReconciler) triggerStartWebhook(application *applicationoperatorgithubiov1alpha1.Application) ([]byte, error) {
-	env := envVarsToMap()
-	webhookUrl := env["WEBHOOK_START"]
+	webhookUrl := os.Getenv("WEBHOOK_START")
 	if webhookUrl != "" {
-		webhookPayload := map[string]string{
-			"environment":   application.Spec.Environment,
-			"application":   application.Spec.Application,
-			"configVersion": env["CONFIG_VERSION"],
-			"version":       application.Spec.Version,
+		webhookPayload := Change{
+			Environment:   application.Spec.Environment,
+			Application:   application.Spec.Application,
+			ConfigVersion: os.Getenv("CONFIG_VERSION"),
+			Version:       application.Spec.Version,
+			Instance:      os.Getenv("INSTANCE"),
+			Started:       time.Now(),
 		}
 		return r.InvokeWebhook(webhookUrl, webhookPayload)
 	}
@@ -399,7 +417,7 @@ func (r *ApplicationReconciler) triggerStartWebhook(application *applicationoper
 
 // Makes a HTTP post request.
 
-func httpPost(url string, payload map[string]string) ([]byte, error) {
+func httpPost(url string, payload Change) ([]byte, error) {
 	postBody, _ := json.Marshal(payload)
 	requestBody := bytes.NewBuffer(postBody)
 
