@@ -40,6 +40,11 @@ fluent-bit:
 
       [FILTER]
           Name rewrite_tag
+          Match kube.var.log.containers.otel*
+          Rule $log .* drop false
+
+      [FILTER]
+          Name rewrite_tag
           Match kube.var.log.containers.application-operator*
           Rule $log .* drop false
 
@@ -58,5 +63,5 @@ fluent-bit:
           Name http
           Match *_{{ .Release.Namespace }}_*
           Host application-api
-          Uri logs
+          Uri logs/
           Format json_lines

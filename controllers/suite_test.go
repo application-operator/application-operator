@@ -44,7 +44,7 @@ var testEnv *envtest.Environment
 var NumWebhooksInvoked = 0
 
 // Makes a mock HTTP POST request.
-func mockHttpPost(url string, payload map[string]string) ([]byte, error) {
+func mockHttpPost(url string, payload Change) ([]byte, error) {
 	NumWebhooksInvoked += 1
 	return nil, nil
 }

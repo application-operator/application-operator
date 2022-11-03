@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"net/http"
 	"os"
 	"path"
@@ -29,13 +30,16 @@ import (
 	"strings"
 	"time"
 
+	log "github.com/sirupsen/logrus"
 	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/yaml"
 
@@ -48,10 +52,8 @@ import (
 // The key to index on to find jobs owned by an application instance.
 var jobOwnerKey = ".metadata.controller"
 
-var log = logf.Log.WithName("controller_application")
-
 // Callback function to invoke a webhook.
-type invokeWebhookFn func(url string, payload map[string]string) ([]byte, error)
+type invokeWebhookFn func(url string, payload Change) ([]byte, error)
 
 // ReconcileApplication reconciles a Application object
 type ApplicationReconciler struct {
@@ -78,8 +80,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		r.InvokeWebhook = httpPost
 	}
 
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling Application")
+	log.Infof("reconciling Application %s/%s", request.Namespace, request.Name)
 
 	// Fetch the Application instance
 	instance := &applicationoperatorgithubiov1alpha1.Application{}
@@ -92,14 +93,17 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
+		log.Errorf("couldn't get application object: %v", err)
 		return reconcile.Result{}, err
 	}
+	log.Infof("found Application %s/%s version %d", instance.Name, instance.Namespace, instance.Generation)
 
 	//
 	// Find Jobs for the application instance.
 	//
 	var jobs batchv1.JobList
 	if err := r.List(ctx, &jobs, client.InNamespace(request.Namespace), client.MatchingFields{jobOwnerKey: request.Name}); err != nil {
+		log.Errorf("couldn't list jobs: %v", err)
 		return ctrl.Result{}, err
 	}
 
@@ -108,7 +112,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 
 	for _, job := range jobs.Items {
 		if job.Name != name {
-			reqLogger.Info("Deleting job %s", job.Name)
+			log.Infof("deleting job %s", job.Name)
 			r.Delete(ctx, &job)
 			continue
 		}
@@ -123,19 +127,23 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		case batchv1.JobFailed:
 			if instance.Status.Status != "failed" {
 				instance.Status.Status = "failed"
-				_, err := r.triggerCompletionWebhook(job, "Failed") // The job has transitioned to failed, trigger failed web hook.
+				_, err := r.triggerCompletionWebhook(job, false) // The job has transitioned to failed, trigger failed web hook.
 				if err != nil {
+					log.Errorf("couldn't send failure webhook: %v", err)
 					return reconcile.Result{}, err
 				}
+				log.Debugf("job %s/%s has failed", job.Namespace, job.Name)
 				instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
 			}
 		case batchv1.JobComplete:
 			if instance.Status.Status != "succeeded" {
 				instance.Status.Status = "succeeded"
-				_, err := r.triggerCompletionWebhook(job, "Succeeded") // The job has transitioned to success, trigger success web hook.
+				_, err := r.triggerCompletionWebhook(job, true) // The job has transitioned to success, trigger success web hook.
 				if err != nil {
+					log.Errorf("couldn't send success webhook: %v", err)
 					return reconcile.Result{}, err
 				}
+				log.Debugf("job %s/%s has succeeded", job.Namespace, job.Name)
 				instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
 			}
 		}
@@ -143,12 +151,12 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 
 	if found {
 		if err := r.Status().Update(ctx, instance); err != nil {
-			log.Error(err, "unable to update Application status")
+			log.Errorf("unable to update Application status: %v", err)
 			return ctrl.Result{}, err
 		}
 
 		// Job already exists - don't requeue
-		reqLogger.Info("Skip reconcile: Job already exists", "Job.Namespace", request.Namespace, "Job.Name", name)
+		log.Infof("skip reconcile: Job %s/%s already exists", request.Namespace, name)
 		return reconcile.Result{}, nil
 	}
 
@@ -157,27 +165,31 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	//
 	job, err := r.newJobForApplication(instance)
 	if err != nil {
+		log.Errorf("couldn't create new job object: %v", err)
 		return reconcile.Result{}, err
 	}
 
 	// Set Application instance as the owner and controller
 	if err = controllerutil.SetControllerReference(instance, job, r.Scheme); err != nil {
+		log.Errorf("couldn't set %s as owner of job: %v", instance.Name, err)
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info("Creating a new Job", "Job.Namespace", job.Namespace, "Job.Name", job.Name)
+	log.Infof("Creating a new Job %s/%s", job.Namespace, job.Name)
 
 	err = r.Client.Create(context.TODO(), job)
 	if err != nil {
+		log.Errorf("couldn't create job %s: %v", job.Name, err)
 		return reconcile.Result{}, err
 	}
 	instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
 	instance.Status.Status = "created"
 	instance.Status.JobID = job.Labels["job-id"]
 	instance.Status.JobName = name
+	instance.Status.ConfigVersion = os.Getenv("CONFIG_VERSION")
 
 	if err := r.Status().Update(ctx, instance); err != nil {
-		log.Error(err, "unable to update Application status")
+		log.Errorf("unable to update Application status: %v", err)
 		return ctrl.Result{}, err
 	}
 
@@ -231,19 +243,24 @@ func (r *ApplicationReconciler) newJobForApplication(application *applicationope
 	env := envVarsToMap()
 	// Note: strings below are truncated to fix the Kubernetes name length of 253 characters.
 
-	bJobId, err := r.triggerStartWebhook(application)
-	if err != nil {
-		return nil, err
-	}
-	jobId := string(bJobId)
+	jobId := application.Status.JobID
 	if jobId == "" {
-		jobId = uuid.New().String()
+		bJobId, err := r.triggerStartWebhook(application)
+		if err != nil {
+			return nil, err
+		}
+		jobId = string(bJobId)
+		if jobId == "" {
+			log.Infof("couldn't convert webhook result %v to string", bJobId)
+			jobId = uuid.New().String()
+		}
 	}
 
 	templateVars := &TemplateVars{
 		Application: application,
 		Env:         env,
 		JobName:     jobName(application),
+		JobId:       jobId,
 	}
 	method := application.Spec.Method
 	if method == "" {
@@ -298,6 +315,15 @@ func (r *ApplicationReconciler) newJobForApplication(application *applicationope
 	return &job, nil
 }
 
+type NotDeletionPredicate struct {
+	predicate.Funcs
+}
+
+// ignore deletions
+func (NotDeletionPredicate) Delete(e event.DeleteEvent) bool {
+	return false
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
@@ -326,25 +352,46 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
-		// Tells the operator framework the type to watch.
-		For(&applicationoperatorgithubiov1alpha1.Application{}).
-		// Inform the manager this controller owns some job, automatically call Reconcile when a job changes.
+		// Watch Application resources, but ignore Application.Status changes
+		For(&applicationoperatorgithubiov1alpha1.Application{},
+			builder.WithPredicates(
+				predicate.And(
+					predicate.GenerationChangedPredicate{},
+					NotDeletionPredicate{},
+				),
+			),
+		).
+		// Also watch Job resources (we want to know about Job Status to track success/failure in Application)
 		Owns(&batchv1.Job{}).
 		Complete(r)
 }
 
+type Change struct {
+	Success       bool      `json:"success,omitempty"`
+	Changed       bool      `json:"changed,omitempty"`
+	ID            string    `json:"id,omitempty"`
+	Environment   string    `json:"environment"`
+	Application   string    `json:"application"`
+	Version       string    `json:"version"`
+	Instance      string    `json:"instance,omitempty"`
+	ConfigVersion string    `json:"config_version"`
+	Started       time.Time `json:"started,omitempty"`
+	Finished      time.Time `json:"finished,omitempty"`
+}
+
 // Triggers the post-deployment webhook to notify if the webhook succeeded or failed.
-func (r *ApplicationReconciler) triggerCompletionWebhook(job batchv1.Job, eventType string) ([]byte, error) {
-	env := envVarsToMap()
-	webhookUrl := env["WEBHOOK_COMPLETION"]
+func (r *ApplicationReconciler) triggerCompletionWebhook(job batchv1.Job, success bool) ([]byte, error) {
+	webhookUrl := os.Getenv("WEBHOOK_COMPLETION")
 	if webhookUrl != "" {
-		webhookPayload := map[string]string{
-			"eventType":     eventType,
-			"id":            job.Labels["job-id"],
-			"environment":   job.Labels["Environment"],
-			"application":   job.Labels["Application"],
-			"configVersion": job.Labels["ConfigVersion"],
-			"version":       job.Labels["version"],
+		webhookPayload := Change{
+			Success:       success,
+			ID:            job.Labels["job-id"],
+			Environment:   job.Labels["Environment"],
+			Application:   job.Labels["Application"],
+			ConfigVersion: job.Labels["ConfigVersion"],
+			Version:       job.Labels["version"],
+			Instance:      os.Getenv("INSTANCE"),
+			Finished:      time.Now(),
 		}
 		return r.InvokeWebhook(webhookUrl, webhookPayload)
 	}
@@ -352,32 +399,33 @@ func (r *ApplicationReconciler) triggerCompletionWebhook(job batchv1.Job, eventT
 }
 
 func (r *ApplicationReconciler) triggerStartWebhook(application *applicationoperatorgithubiov1alpha1.Application) ([]byte, error) {
-	env := envVarsToMap()
-	webhookUrl := env["WEBHOOK_START"]
+	webhookUrl := os.Getenv("WEBHOOK_START")
 	if webhookUrl != "" {
-		webhookPayload := map[string]string{
-			"environment":   application.Spec.Environment,
-			"application":   application.Spec.Application,
-			"configVersion": env["CONFIG_VERSION"],
-			"version":       application.Spec.Version,
+		webhookPayload := Change{
+			Environment:   application.Spec.Environment,
+			Application:   application.Spec.Application,
+			ConfigVersion: os.Getenv("CONFIG_VERSION"),
+			Version:       application.Spec.Version,
+			Instance:      os.Getenv("INSTANCE"),
+			Started:       time.Now(),
 		}
 		return r.InvokeWebhook(webhookUrl, webhookPayload)
-
 	}
+	log.Warnf("no webhook found")
 	return nil, nil
 }
 
 // Makes a HTTP post request.
 
-func httpPost(url string, payload map[string]string) ([]byte, error) {
+func httpPost(url string, payload Change) ([]byte, error) {
 	postBody, _ := json.Marshal(payload)
 	requestBody := bytes.NewBuffer(postBody)
 
 	response, err := http.Post(url, "application/json", requestBody)
 	if err != nil {
+		log.Errorf("received error from %s: %v", url, err)
 		return nil, err
 	}
-	var buffer []byte
-	_, err = response.Body.Read(buffer)
-	return buffer, err
+	defer response.Body.Close()
+	return io.ReadAll(response.Body)
 }

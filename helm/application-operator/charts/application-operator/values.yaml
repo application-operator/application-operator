@@ -2,7 +2,7 @@ image:
   repository: 208503650764.dkr.ecr.us-west-2.amazonaws.com/skedulo/application-operator
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: v0.3-75-gc9ece2b
+  tag: v0.3-78-gfc4d07b
 
 replicaCount: 1
 
