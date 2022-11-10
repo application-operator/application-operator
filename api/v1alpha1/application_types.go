@@ -35,11 +35,11 @@ type ApplicationSpec struct {
 
 // ApplicationStatus defines the observed state of Application
 type ApplicationStatus struct {
-	ConfigVersion string      `json:"configVersion"`
-	LastUpdated   metav1.Time `json:"lastUpdated"`
-	Status        string      `json:"status"`
-	JobID         string      `json:"jobId"`
-	JobName       string      `json:"jobName"`
+	ConfigVersion string      `json:"configVersion,omitempty"`
+	LastUpdated   metav1.Time `json:"lastUpdated,omitempty"`
+	Status        string      `json:"status,omitempty"`
+	JobID         string      `json:"jobId,omitempty"`
+	JobName       string      `json:"jobName,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

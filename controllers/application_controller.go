@@ -150,6 +150,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	}
 
 	if found {
+		instance.Status.ConfigVersion = os.Getenv("CONFIG_VERSION")
 		if err := r.Status().Update(ctx, instance); err != nil {
 			log.Errorf("unable to update Application status: %v", err)
 			return ctrl.Result{}, err
