@@ -329,6 +329,23 @@ func (NotDeletionPredicate) Delete(e event.DeleteEvent) bool {
 	return false
 }
 
+type JobStatusUpdateOnly struct {
+	predicate.Funcs
+}
+
+func (JobStatusUpdateOnly) Create(e event.CreateEvent) bool {
+	return false
+}
+
+func (JobStatusUpdateOnly) Delete(e event.DeleteEvent) bool {
+	return false
+}
+
+func (JobStatusUpdateOnly) Update(e event.UpdateEvent) bool {
+	a := predicate.GenerationChangedPredicate{}
+	return !a.Update(e)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
@@ -366,8 +383,8 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				),
 			),
 		).
-		// Also watch Job resources (we want to know about Job Status to track success/failure in Application)
-		Owns(&batchv1.Job{}).
+		// Also watch Job resources status updates only (we want to know about Job Status to track success/failure in Application)
+		Owns(&batchv1.Job{}, builder.WithPredicates(JobStatusUpdateOnly{})).
 		Complete(r)
 }
 
