@@ -232,11 +232,15 @@ func versionToRFC1123(version string, length int) string {
 }
 
 func jobName(application *applicationoperatorgithubiov1alpha1.Application) string {
-	return fmt.Sprintf("%s-%s-%s-%s",
+	version := ""
+	if application.Spec.Version != "" {
+		version = fmt.Sprintf("-%s", versionToRFC1123(application.Spec.Version, 13))
+	}
+	return fmt.Sprintf("%s-%s-%s%s",
 		versionToRFC1123(application.Spec.Environment, 13),
 		versionToRFC1123(application.Spec.Application, 13),
 		versionToRFC1123(os.Getenv("CONFIG_VERSION"), 13),
-		versionToRFC1123(application.Spec.Version, 13),
+		version,
 	)
 }
 
@@ -373,7 +377,7 @@ type Change struct {
 	ID            string    `json:"id,omitempty"`
 	Environment   string    `json:"environment"`
 	Application   string    `json:"application"`
-	Version       string    `json:"version"`
+	Version       string    `json:"version,omitempty"`
 	Instance      string    `json:"instance,omitempty"`
 	ConfigVersion string    `json:"config_version"`
 	Started       time.Time `json:"started,omitempty"`

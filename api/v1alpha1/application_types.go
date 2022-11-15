@@ -26,7 +26,7 @@ type ApplicationSpec struct {
 	Application string `json:"application"`
 	// +kubebuilder:validation:MaxLength=10
 	Environment string `json:"environment"`
-	Version     string `json:"version"`
+	Version     string `json:"version,omitempty"`
 	Method      string `json:"method,omitempty"`
 	// +kubebuilder:default:=false
 	// +kubebuilder:validation:Optional
