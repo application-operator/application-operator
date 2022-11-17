@@ -97,14 +97,6 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 	log.Infof("found Application %s/%s version %d", instance.Name, instance.Namespace, instance.Generation)
-	if instance.Spec.ConfigVersion != os.Getenv("CONFIG_VERSION") {
-		instance.Spec.ConfigVersion = os.Getenv("CONFIG_VERSION")
-		if err := r.Update(ctx, instance); err != nil {
-			log.Errorf("unable to update Application status: %v", err)
-			return ctrl.Result{}, err
-		}
-	}
-
 	//
 	// Find Jobs for the application instance.
 	//
@@ -158,6 +150,9 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	}
 
 	if found {
+		if instance.Status.ConfigVersion != os.Getenv("CONFIG_VERSION") {
+			instance.Status.ConfigVersion = os.Getenv("CONFIG_VERSION")
+		}
 		if err := r.Status().Update(ctx, instance); err != nil {
 			log.Errorf("unable to update Application status: %v", err)
 			return ctrl.Result{}, err
@@ -244,7 +239,7 @@ func jobName(application *applicationoperatorgithubiov1alpha1.Application) strin
 	return fmt.Sprintf("%s-%s-%s%s",
 		versionToRFC1123(application.Spec.Environment, 13),
 		versionToRFC1123(application.Spec.Application, 13),
-		versionToRFC1123(application.Spec.ConfigVersion, 13),
+		versionToRFC1123(os.Getenv("CONFIG_VERSION"), 13),
 		version,
 	)
 }
@@ -253,17 +248,14 @@ func (r *ApplicationReconciler) newJobForApplication(application *applicationope
 	env := envVarsToMap()
 	// Note: strings below are truncated to fix the Kubernetes name length of 253 characters.
 
-	jobId := application.Status.JobID
+	bJobId, err := r.triggerStartWebhook(application)
+	if err != nil {
+		return nil, err
+	}
+	jobId := string(bJobId)
 	if jobId == "" {
-		bJobId, err := r.triggerStartWebhook(application)
-		if err != nil {
-			return nil, err
-		}
-		jobId = string(bJobId)
-		if jobId == "" {
-			log.Infof("couldn't convert webhook result %v to string", bJobId)
-			jobId = uuid.New().String()
-		}
+		log.Infof("couldn't convert webhook result %v to string", bJobId)
+		jobId = uuid.New().String()
 	}
 
 	templateVars := &TemplateVars{

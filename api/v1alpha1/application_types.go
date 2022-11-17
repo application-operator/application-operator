@@ -29,16 +29,16 @@ type ApplicationSpec struct {
 	Version     string `json:"version,omitempty"`
 	Method      string `json:"method,omitempty"`
 	// +kubebuilder:default:=false
-	DryRun        bool   `json:"dryrun,omitempty"`
-	ConfigVersion string `json:"configVersion,omitempty"`
+	DryRun bool `json:"dryrun,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application
 type ApplicationStatus struct {
-	LastUpdated metav1.Time `json:"lastUpdated,omitempty"`
-	Status      string      `json:"status,omitempty"`
-	JobID       string      `json:"jobId,omitempty"`
-	JobName     string      `json:"jobName,omitempty"`
+	LastUpdated   metav1.Time `json:"lastUpdated,omitempty"`
+	Status        string      `json:"status,omitempty"`
+	JobID         string      `json:"jobId,omitempty"`
+	JobName       string      `json:"jobName,omitempty"`
+	ConfigVersion string      `json:"configVersion,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

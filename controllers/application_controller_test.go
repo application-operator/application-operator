@@ -66,12 +66,11 @@ var _ = Describe("Application Operator controller", func() {
 				Namespace: applicationNamespace,
 			},
 			Spec: applicationoperatorgithubiov1alpha1.ApplicationSpec{
-				Application:   applicationName,
-				Environment:   "dev",
-				Version:       "1",
-				Method:        "test-method",
-				ConfigVersion: "v1.2.3",
-				DryRun:        false,
+				Application: applicationName,
+				Environment: "dev",
+				Version:     "1",
+				Method:      "test-method",
+				DryRun:      false,
 			},
 		}
 
