@@ -63,8 +63,6 @@ spec:
               application:
                 maxLength: 24
                 type: string
-              configVersion:
-                type: string
               dryrun:
                 default: false
                 type: boolean
@@ -82,6 +80,8 @@ spec:
           status:
             description: ApplicationStatus defines the observed state of Application
             properties:
+              configVersion:
+                type: string
               jobId:
                 type: string
               jobName:
