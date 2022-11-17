@@ -104,6 +104,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 			return ctrl.Result{}, err
 		}
 	}
+
 	//
 	// Find Jobs for the application instance.
 	//
