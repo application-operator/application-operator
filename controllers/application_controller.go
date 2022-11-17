@@ -97,6 +97,13 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 	log.Infof("found Application %s/%s version %d", instance.Name, instance.Namespace, instance.Generation)
+	if instance.Spec.ConfigVersion != os.Getenv("CONFIG_VERSION") {
+		instance.Spec.ConfigVersion = os.Getenv("CONFIG_VERSION")
+		if err := r.Update(ctx, instance); err != nil {
+			log.Errorf("unable to update Application status: %v", err)
+			return ctrl.Result{}, err
+		}
+	}
 
 	//
 	// Find Jobs for the application instance.
@@ -123,6 +130,7 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 			if instance.Status.Status != "running" {
 				instance.Status.Status = "running"
 				instance.Status.LastUpdated = metav1.Time{Time: time.Now()}
+				log.Debugf("job %s/%s is running", job.Namespace, job.Name)
 			}
 		case batchv1.JobFailed:
 			if instance.Status.Status != "failed" {
@@ -154,7 +162,6 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 			log.Errorf("unable to update Application status: %v", err)
 			return ctrl.Result{}, err
 		}
-
 		// Job already exists - don't requeue
 		log.Infof("skip reconcile: Job %s/%s already exists", request.Namespace, name)
 		return reconcile.Result{}, nil
@@ -186,7 +193,6 @@ func (r *ApplicationReconciler) Reconcile(ctx context.Context, request reconcile
 	instance.Status.Status = "created"
 	instance.Status.JobID = job.Labels["job-id"]
 	instance.Status.JobName = name
-	instance.Status.ConfigVersion = os.Getenv("CONFIG_VERSION")
 
 	if err := r.Status().Update(ctx, instance); err != nil {
 		log.Errorf("unable to update Application status: %v", err)
@@ -231,11 +237,15 @@ func versionToRFC1123(version string, length int) string {
 }
 
 func jobName(application *applicationoperatorgithubiov1alpha1.Application) string {
-	return fmt.Sprintf("%s-%s-%s-%s",
+	version := ""
+	if application.Spec.Version != "" {
+		version = fmt.Sprintf("-%s", versionToRFC1123(application.Spec.Version, 13))
+	}
+	return fmt.Sprintf("%s-%s-%s%s",
 		versionToRFC1123(application.Spec.Environment, 13),
 		versionToRFC1123(application.Spec.Application, 13),
-		versionToRFC1123(os.Getenv("CONFIG_VERSION"), 13),
-		versionToRFC1123(application.Spec.Version, 13),
+		versionToRFC1123(application.Spec.ConfigVersion, 13),
+		version,
 	)
 }
 
@@ -324,6 +334,25 @@ func (NotDeletionPredicate) Delete(e event.DeleteEvent) bool {
 	return false
 }
 
+type JobStatusUpdateOnly struct {
+	predicate.Funcs
+}
+
+/*
+func (JobStatusUpdateOnly) Create(e event.CreateEvent) bool {
+	return false
+}
+*/
+
+func (JobStatusUpdateOnly) Delete(e event.DeleteEvent) bool {
+	return false
+}
+
+func (JobStatusUpdateOnly) Update(e event.UpdateEvent) bool {
+	a := predicate.GenerationChangedPredicate{}
+	return !a.Update(e)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
@@ -361,8 +390,8 @@ func (r *ApplicationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				),
 			),
 		).
-		// Also watch Job resources (we want to know about Job Status to track success/failure in Application)
-		Owns(&batchv1.Job{}).
+		// Also watch Job resources status updates only (we want to know about Job Status to track success/failure in Application)
+		Owns(&batchv1.Job{}, builder.WithPredicates(JobStatusUpdateOnly{})).
 		Complete(r)
 }
 
@@ -372,7 +401,7 @@ type Change struct {
 	ID            string    `json:"id,omitempty"`
 	Environment   string    `json:"environment"`
 	Application   string    `json:"application"`
-	Version       string    `json:"version"`
+	Version       string    `json:"version,omitempty"`
 	Instance      string    `json:"instance,omitempty"`
 	ConfigVersion string    `json:"config_version"`
 	Started       time.Time `json:"started,omitempty"`

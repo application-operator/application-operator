@@ -26,20 +26,19 @@ type ApplicationSpec struct {
 	Application string `json:"application"`
 	// +kubebuilder:validation:MaxLength=10
 	Environment string `json:"environment"`
-	Version     string `json:"version"`
+	Version     string `json:"version,omitempty"`
 	Method      string `json:"method,omitempty"`
 	// +kubebuilder:default:=false
-	// +kubebuilder:validation:Optional
-	DryRun bool `json:"dryrun"`
+	DryRun        bool   `json:"dryrun,omitempty"`
+	ConfigVersion string `json:"configVersion,omitempty"`
 }
 
 // ApplicationStatus defines the observed state of Application
 type ApplicationStatus struct {
-	ConfigVersion string      `json:"configVersion"`
-	LastUpdated   metav1.Time `json:"lastUpdated"`
-	Status        string      `json:"status"`
-	JobID         string      `json:"jobId"`
-	JobName       string      `json:"jobName"`
+	LastUpdated metav1.Time `json:"lastUpdated,omitempty"`
+	Status      string      `json:"status,omitempty"`
+	JobID       string      `json:"jobId,omitempty"`
+	JobName     string      `json:"jobName,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
